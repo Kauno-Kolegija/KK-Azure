@@ -1,0 +1,17 @@
+{
+    "LabName": "LAB 2: Azure Įrankiai ir Resursai",
+    "ResourceGroupPattern": "^RG-LAB02-",
+    "RequiredResources": [
+        { 
+            "Type": "Microsoft.Web/sites", 
+            "Name": "Web App (Svetainė)",
+            "Score": 1
+        },
+        { 
+            "Type": "Microsoft.Storage/storageAccounts", 
+            "Name": "Storage Account (Saugykla)",
+            "Score": 1
+        }
+    ],
+    "AllowedRegions": ["northeurope", "westeurope", "swedencentral", "norwayeast", "eastus", "polandcentral"]
+}
