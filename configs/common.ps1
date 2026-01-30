@@ -3,24 +3,22 @@ function Initialize-Lab {
         [string]$LocalConfigUrl
     )
 
-    # 1. Konfigūracijų nuorodos
+    # 1. Konfigūracijos ir protokolas
     $GlobalUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/global.json"
-    
-    # 2. Saugumo protokolas
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    # 3. Konfigūracijų atsisiuntimas
+    # 2. Siunčiame failus
     try {
         $GlobalConfig = Invoke-RestMethod -Uri $GlobalUrl -ErrorAction Stop
         $LocalConfig  = Invoke-RestMethod -Uri $LocalConfigUrl -ErrorAction Stop
     } catch {
-        Write-Error "KLAIDA: Nepavyko atsisiųsti konfigūracijos failų. Patikrinkite interneto ryšį."
+        Write-Error "KLAIDA: Nepavyko atsisiųsti konfigūracijos (JSON)."
         throw $_
     }
 
-    # 4. Studento Identifikacija
+    # 3. Identifikuojame studentą
     $context = Get-AzContext
-    if (-not $context) { Write-Error "Neprisijungta prie Azure! (Naudokite 'az login')"; exit }
+    if (-not $context) { Write-Error "Neprisijungta prie Azure!"; exit }
 
     $StudentEmail = $null
     if ($env:ACC_USER_NAME -and $env:ACC_USER_NAME -match "@") {
@@ -33,11 +31,11 @@ function Initialize-Lab {
         $StudentEmail = "$($context.Account.Id) (System Identity)"
     }
 
-    # 5. Išvedimas (Minimalistinis)
+    # 4. VALOME EKRANĄ IR RODOME TIK GELTONĄ PRANEŠIMĄ
     Clear-Host
-    # Čia pakeista į geltoną spalvą ir nuimta kita info
     Write-Host "Vykdoma patikra..." -ForegroundColor Yellow
 
+    # 5. Grąžiname duomenis skriptui
     return [PSCustomObject]@{
         GlobalConfig = $GlobalConfig
         LocalConfig  = $LocalConfig
