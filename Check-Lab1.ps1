@@ -70,23 +70,24 @@ try {
 
 # --- REZULTATŲ GENERAVIMAS ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
+$studentEmail = $null
 
-# NAUJAS BŪDAS: Naudojame Azure CLI, nes jis patikimiausiai rodo "Human Identity" Cloud Shell'e
-try {
-    # Bandome gauti per Azure CLI (tai veikia net kai PowerShell rodo MSI)
-    $cliUser = az account show --query "user.name" -o tsv 2>$null
-    
-    if ($cliUser -and $cliUser -ne "" -and $cliUser -notmatch "MSI@") {
-        $studentEmail = $cliUser
-    } else {
-        # Atsarginis variantas: Aplinkos kintamasis
-        $studentEmail = $env:ACC_USER_NAME
-    }
-} catch {
-    $studentEmail = $context.Account.Id
+# 1 BŪDAS: Tikriname specialų Cloud Shell aplinkos kintamąjį (Patikimiausias)
+if ($env:ACC_USER_NAME -and $env:ACC_USER_NAME -match "@") {
+    $studentEmail = $env:ACC_USER_NAME
 }
 
-# Jei vis tiek nepavyko ir kintamasis tuščias, naudojame techninį ID
+# 2 BŪDAS: Jei kintamojo nėra, bandome per Azure CLI (User Name)
+if (-not $studentEmail) {
+    try {
+        $cliUser = az account show --query "user.name" -o tsv 2>$null
+        if ($cliUser -and $cliUser -match "@" -and $cliUser -notmatch "MSI@") {
+            $studentEmail = $cliUser
+        }
+    } catch {}
+}
+
+# 3 BŪDAS: Jei vis tiek tuščia, imame Context ID (Techninis/MSI)
 if (-not $studentEmail) {
     $studentEmail = "$($context.Account.Id) (Cloud Shell Identity)"
 }
