@@ -60,33 +60,40 @@ if ($targetRG) {
 
     $resourceResults += [PSCustomObject]@{ Name = "Virtualus Serveris"; Text = $vmText; Color = $vmColor }
 
-    # --- 2. FUNCTION APP (PATAISYTA DALIS) ---
-    # Ieškome tiesiogiai Web/sites tipo ir filtruojame pagal Kind
-    $allSites = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites"
-    $funcApp = $allSites | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
+    # --- 2. FUNCTION APP (NAUJA LOGIKA) ---
+    # Naudojame Get-AzWebApp, nes tai patikimiau randa Function Apps
+    $webApp = Get-AzWebApp -ResourceGroupName $targetRG.ResourceGroupName | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
     
-    if ($funcApp) {
+    if ($webApp) {
         $resourceResults += [PSCustomObject]@{
             Name  = "Function App"
-            Text  = "[OK] - $($funcApp.Name) ($($funcApp.Location))"
+            Text  = "[OK] - $($webApp.Name) ($($webApp.Location))"
             Color = "Green"
         }
 
-        # --- 3. FUNKCIJOS VIDUJE (HTTP ir Timer) ---
-        $subFunctions = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites/functions"
-        
+        # --- 3. FUNKCIJOS VIDUJE (NAUJA LOGIKA) ---
+        # Naudojame specialią komandą funkcijų sąrašui gauti
+        try {
+            $appFunctions = Get-AzWebAppFunction -ResourceGroupName $targetRG.ResourceGroupName -Name $webApp.Name -ErrorAction SilentlyContinue
+        } catch {
+            $appFunctions = @()
+        }
+
         # HTTP (-fun1)
-        $fun1 = $subFunctions | Where-Object { $_.Name -like "*-fun1" } | Select-Object -First 1
+        $fun1 = $appFunctions | Where-Object { $_.Name -like "*-fun1" } | Select-Object -First 1
         if ($fun1) {
-            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[OK] - $($fun1.Name | Split-Path -Leaf)"; Color = "Green" }
+            # Išvalome pavadinimą, nes kartais grąžina "AppName/FunctionName"
+            $cleanName = $fun1.Name.Split('/')[-1]
+            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[OK] - $cleanName"; Color = "Green" }
         } else {
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[TRŪKSTA] - Nerasta funkcija *-fun1"; Color = "Red" }
         }
 
         # Timer (-fun2)
-        $fun2 = $subFunctions | Where-Object { $_.Name -like "*-fun2" } | Select-Object -First 1
+        $fun2 = $appFunctions | Where-Object { $_.Name -like "*-fun2" } | Select-Object -First 1
         if ($fun2) {
-            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[OK] - $($fun2.Name | Split-Path -Leaf)"; Color = "Green" }
+            $cleanName = $fun2.Name.Split('/')[-1]
+            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[OK] - $cleanName"; Color = "Green" }
         } else {
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[TRŪKSTA] - Nerasta funkcija *-fun2"; Color = "Red" }
         }
