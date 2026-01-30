@@ -1,14 +1,14 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "SCRIPT VERSIJA: v5.0 (Brutali paieška)"
+$ScriptVersion = "SCRIPT VERSIJA: v6.0 (Azure CLI metodas)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
+Write-Host "Vykdoma patikra... Tai gali užtrukti kelias sekundes."
 Write-Host "--------------------------------------------------"
-Start-Sleep -Seconds 1
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    # Pridedame ?v=... kad visada gautume naujausią common versiją
+    # Testavimo metu paliekame v=random, kad nereikėtų jums vargti
     irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1?v=$(Get-Random)" | iex
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
@@ -16,7 +16,6 @@ try {
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-# Dėmesio: Naudojame Check-Lab3-config.json kaip prašėte
 $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/Check-Lab3-config.json"
 $LocCfg = $Setup.LocalConfig
 
@@ -69,7 +68,6 @@ if ($targetRG) {
     $resourceResults += [PSCustomObject]@{ Name = "Virtualus Serveris"; Text = $vmText; Color = $vmColor }
 
     # --- 2. FUNCTION APP ---
-    # Ieškome Function App
     $funcApp = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites" | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
     
     if ($funcApp) {
@@ -79,28 +77,37 @@ if ($targetRG) {
             Color = "Green"
         }
 
-        # --- 3. FUNKCIJOS VIDUJE (BRUTALI PAIEŠKA) ---
-        # Užuot pasitikėję API filtrais, atsisiunčiame VISKĄ kas yra grupėje ir filtruojame patys
-        # Tai lėtesnis, bet patikimesnis būdas
-        $allGroupResources = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName
+        # --- 3. FUNKCIJOS (NAUDOJANT AZURE CLI) ---
+        # Tai yra "branduolinis" variantas. Jei PowerShell nemato, CLI pamatys.
+        # Cloud Shell aplinkoje 'az' komanda yra instaliuota standartiškai.
         
-        # Ieškome pagal pavadinimo fragmentą
-        $fun1 = $allGroupResources | Where-Object { $_.Name -like "*-fun1" -and $_.ResourceType -like "*functions" } | Select-Object -First 1
-        $fun2 = $allGroupResources | Where-Object { $_.Name -like "*-fun2" -and $_.ResourceType -like "*functions" } | Select-Object -First 1
+        Write-Host "   (Tikrinamas funkcijų sąrašas per Azure CLI...)" -ForegroundColor DarkGray
+        
+        try {
+            # Gauname JSON sąrašą tiesiai iš API
+            $cliOutput = az functionapp function list --resource-group $targetRG.ResourceGroupName --name $funcApp.Name --output json | ConvertFrom-Json
+        } catch {
+            $cliOutput = @()
+        }
 
         # HTTP (-fun1)
+        # Azure CLI grąžina pilną ID, pvz: .../functions/Bartukas-fun1
+        $fun1 = $cliOutput | Where-Object { $_.name -like "*/$($Setup.LastName)-fun1" -or $_.name -like "*/*-fun1" } | Select-Object -First 1
+        
         if ($fun1) {
-            $fName = $fun1.Name.Split('/')[-1]
-            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[OK] - $fName"; Color = "Green" }
+            # Išvalome vardą
+            $cleanName = $fun1.name.Split('/')[-1]
+            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[OK] - $cleanName"; Color = "Green" }
         } else {
-            # Paskutinis bandymas - galbūt ji tiesiog "Web/sites/functions" tipe
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[TRŪKSTA] - Nerasta funkcija *-fun1"; Color = "Red" }
         }
 
         # Timer (-fun2)
+        $fun2 = $cliOutput | Where-Object { $_.name -like "*/$($Setup.LastName)-fun2" -or $_.name -like "*/*-fun2" } | Select-Object -First 1
+        
         if ($fun2) {
-            $fName = $fun2.Name.Split('/')[-1]
-            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[OK] - $fName"; Color = "Green" }
+            $cleanName = $fun2.name.Split('/')[-1]
+            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[OK] - $cleanName"; Color = "Green" }
         } else {
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[TRŪKSTA] - Nerasta funkcija *-fun2"; Color = "Red" }
         }
@@ -123,7 +130,6 @@ Write-Host "$($Setup.HeaderTitle)"
 if ($LocCfg.LabName) { Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow } else { Write-Host "LAB 3: Compute" -ForegroundColor Yellow }
 Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
-Write-Host "Ver: $ScriptVersion"
 Write-Host "==================================================" -ForegroundColor Gray
 
 $i = 1
