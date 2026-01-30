@@ -15,6 +15,8 @@ try {
 # --- NAUDOJAME KINTAMUOSIUS IŠ FAILO ---
 $destytojoEmail = $config.InstructorEmail
 $regexPattern = $config.NamingPattern
+$university = $config.KaunoKolegija
+$moduleName = $config.ModuleName
 $labTitle = $config.LabName
 
 Clear-Host
@@ -72,7 +74,8 @@ $studentEmail = $context.Account.Id
 
 $report = @"
 ==================================================
-KAUNO KOLEGIJA | AZURE LAB 1 ATASKAITA
+$university | $moduleName 
+$labTitle
 Data: $date
 Studentas: $studentEmail
 ==================================================
