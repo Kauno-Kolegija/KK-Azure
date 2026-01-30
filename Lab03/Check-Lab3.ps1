@@ -7,7 +7,7 @@ try {
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/Check-Lab3-config.json"
+$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/lab3.json"
 $LocCfg = $Setup.LocalConfig
 
 # --- 3. DUOMENŲ RINKIMAS ---
@@ -38,11 +38,11 @@ if ($targetRG) {
     $vm = Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName | Select-Object -First 1
     
     if ($vm) {
-        # Tikriname dydį (turi būti B1ms po PowerShell užduoties)
+        # Tikriname dydį
         $actualSize = $vm.HardwareProfile.VmSize
         $expectedSize = "Standard_B1ms"
         
-        # Tikriname statusą (Running / Stopped / Deallocated)
+        # Tikriname statusą
         $statusObj = Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName -Name $vm.Name -Status
         $displayStatus = ($statusObj.Statuses | Where-Object Code -like "PowerState/*" | Select-Object -First 1).DisplayStatus
         
@@ -60,8 +60,10 @@ if ($targetRG) {
 
     $resourceResults += [PSCustomObject]@{ Name = "Virtualus Serveris"; Text = $vmText; Color = $vmColor }
 
-    # --- 2. FUNCTION APP ---
-    $funcApp = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites" | Where-ObjectKind "functionapp" | Select-Object -First 1
+    # --- 2. FUNCTION APP (PATAISYTA DALIS) ---
+    # Ieškome tiesiogiai Web/sites tipo ir filtruojame pagal Kind
+    $allSites = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites"
+    $funcApp = $allSites | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
     
     if ($funcApp) {
         $resourceResults += [PSCustomObject]@{
@@ -71,10 +73,9 @@ if ($targetRG) {
         }
 
         # --- 3. FUNKCIJOS VIDUJE (HTTP ir Timer) ---
-        # Ieškome 'sites/functions' tipo resursų
         $subFunctions = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites/functions"
         
-        # Ieškome HTTP funkcijos (pabaiga -fun1)
+        # HTTP (-fun1)
         $fun1 = $subFunctions | Where-Object { $_.Name -like "*-fun1" } | Select-Object -First 1
         if ($fun1) {
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[OK] - $($fun1.Name | Split-Path -Leaf)"; Color = "Green" }
@@ -82,7 +83,7 @@ if ($targetRG) {
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[TRŪKSTA] - Nerasta funkcija *-fun1"; Color = "Red" }
         }
 
-        # Ieškome Timer funkcijos (pabaiga -fun2)
+        # Timer (-fun2)
         $fun2 = $subFunctions | Where-Object { $_.Name -like "*-fun2" } | Select-Object -First 1
         if ($fun2) {
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[OK] - $($fun2.Name | Split-Path -Leaf)"; Color = "Green" }
