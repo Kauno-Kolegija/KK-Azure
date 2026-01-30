@@ -2,16 +2,15 @@
 try {
     irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
 } catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1). Patikrinkite interneto ryšį."
+    Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
     exit
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-# Ši funkcija (iš common.ps1) atsiunčia konfigūraciją, identifikuoja studentą ir parodo geltoną "Vykdoma..."
 $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
 $LocCfg = $Setup.LocalConfig
 
-# --- 3. TYLUS TIKRINIMAS IR DUOMENŲ RINKIMAS ---
+# --- 3. DUOMENŲ RINKIMAS ---
 
 # A. Randame Resursų grupę
 $targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
@@ -20,41 +19,41 @@ if ($targetRG) {
     $rgText  = "[OK] - $($targetRG.ResourceGroupName)"
     $rgColor = "Green"
 } else {
-    $rgText  = "[KLAIDA] - Nerasta grupė pagal šabloną '$($LocCfg.ResourceGroupPattern)...'"
+    $rgText  = "[KLAIDA] - Nerasta grupė '$($LocCfg.ResourceGroupPattern)...'"
     $rgColor = "Red"
 }
 
 # B. Tikriname resursus
 $resourceResults = @()
 
-# 1. Pirmas elementas visada yra Resursų Grupė
+# 1. Pirmas elementas - Resursų Grupė
 $resourceResults += [PSCustomObject]@{
     Name  = "Resursų grupė"
     Text  = $rgText
     Color = $rgColor
 }
 
-# 2. Tikriname kitus resursus (jei grupė egzistuoja)
+# 2. Kiti resursai
 if ($targetRG) {
-    # Paimame visus resursus toje grupėje
     $allResources = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName
     
     foreach ($req in $LocCfg.RequiredResources) {
-        # Ieškome resurso pagal tipą
         $found = $allResources | Where-Object { $_.ResourceType -eq $req.Type } | Select-Object -First 1
         
         if ($found) {
-            # --- Papildomos informacijos formavimas ---
+            # --- FORMUOJAME PAPILDOMĄ INFO (Regionas, SKU) ---
             $extraInfo = ""
             
-            # Jei resursas turi SKU (pvz. Storage: Standard_LRS), pridedame jį
+            # Regionas (visada rodomas)
+            $region = $found.Location
+            
+            # SKU / Kaina (jei yra, pvz. Standard_LRS)
             if ($found.Sku -and $found.Sku.Name) {
                 $extraInfo = " [$($found.Sku.Name)]"
             }
             
-            # Formatas: [OK] - Vardas (Regionas) [SKU]
-            # Pvz.: [OK] - mantas-storage (northeurope) [Standard_LRS]
-            $finalText = "[OK] - $($found.Name) ($($found.Location))$extraInfo"
+            # Galutinis tekstas: [OK] - Vardas (Regionas) [SKU]
+            $finalText = "[OK] - $($found.Name) ($region)$extraInfo"
             
             $resourceResults += [PSCustomObject]@{
                 Name  = $req.Name
@@ -70,7 +69,6 @@ if ($targetRG) {
         }
     }
 } else {
-    # Jei grupės nėra, visi kiti resursai automatiškai žymimi kaip klaida
     foreach ($req in $LocCfg.RequiredResources) {
         $resourceResults += [PSCustomObject]@{
             Name  = $req.Name
@@ -80,32 +78,27 @@ if ($targetRG) {
     }
 }
 
-# --- 4. GALUTINIS REZULTATAS (Išvedimas į ekraną) ---
+# --- 4. GALUTINIS REZULTATAS ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
 Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Gray
 Write-Host "$($Setup.HeaderTitle)"
-
-# Lab Pavadinimas - Geltonas
 Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
-
 Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
 
-# Dinaminis sąrašo išvedimas
 $i = 1
 foreach ($res in $resourceResults) {
     $label = "$i. $($res.Name):"
     
-    # Lygiavimo logika (kad stulpeliai būtų tiesūs)
+    # Lygiavimas (plotis 35 + apsauga)
     $targetWidth = 35
     $neededSpaces = $targetWidth - $label.Length
-    if ($neededSpaces -lt 1) { $neededSpaces = 1 } # Apsauga nuo neigiamų skaičių
+    if ($neededSpaces -lt 1) { $neededSpaces = 1 }
     $padding = " " * $neededSpaces
     
-    # Išvedame eilutę
     Write-Host "$label$padding" -NoNewline
     Write-Host $res.Text -ForegroundColor $res.Color
     $i++
