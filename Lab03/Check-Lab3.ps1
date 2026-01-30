@@ -1,15 +1,6 @@
-# --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "SCRIPT VERSIJA: v6.0 (Azure CLI metodas)"
-Clear-Host
-Write-Host "--------------------------------------------------"
-Write-Host $ScriptVersion -ForegroundColor Magenta
-Write-Host "Vykdoma patikra... Tai gali užtrukti kelias sekundes."
-Write-Host "--------------------------------------------------"
-
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    # Testavimo metu paliekame v=random, kad nereikėtų jums vargti
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1?v=$(Get-Random)" | iex
+    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
     exit
@@ -25,8 +16,14 @@ $LocCfg = $Setup.LocalConfig
 $targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB03" } | Select-Object -First 1
 
 if ($targetRG) {
-    $rgText  = "[OK] - $($targetRG.ResourceGroupName)"
-    $rgColor = "Green"
+    # Tikriname regioną (Turi būti Norway East pagal 30 punktą)
+    if ($targetRG.Location -eq "norwayeast") {
+        $rgText  = "[OK] - $($targetRG.ResourceGroupName) (Norway East)"
+        $rgColor = "Green"
+    } else {
+        $rgText  = "[DĖMESIO] - $($targetRG.ResourceGroupName) (Yra: $($targetRG.Location), Reikėjo: norwayeast)"
+        $rgColor = "Yellow"
+    }
 } else {
     $rgText  = "[KLAIDA] - Nerasta grupė RG-LAB03..."
     $rgColor = "Red"
@@ -50,8 +47,13 @@ if ($targetRG) {
         $actualSize = $vm.HardwareProfile.VmSize
         $expectedSize = "Standard_B1ms"
         
+        # Būsena
         $statusObj = Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName -Name $vm.Name -Status
         $displayStatus = ($statusObj.Statuses | Where-Object Code -like "PowerState/*" | Select-Object -First 1).DisplayStatus
+        
+        # Diskas (46-49 punktai reikalauja papildomo disko)
+        $dataDisks = $vm.StorageProfile.DataDisks
+        $diskCount = $dataDisks.Count
         
         if ($actualSize -eq $expectedSize) {
             $vmText = "[OK] - $($vm.Name) ($actualSize) [$displayStatus]"
@@ -60,12 +62,27 @@ if ($targetRG) {
             $vmText = "[DĖMESIO] - $($vm.Name). Dydis: $actualSize (Reikėjo: $expectedSize)"
             $vmColor = "Yellow"
         }
+
+        # Atskiras įrašas diskui
+        if ($diskCount -ge 1) {
+            $diskText = "[OK] - Rasta papildomų diskų: $diskCount (128 GiB)"
+            $diskColor = "Green"
+        } else {
+            $diskText = "[TRŪKSTA] - Nėra papildomo duomenų disko (Data Disk)"
+            $diskColor = "Red"
+        }
+
     } else {
         $vmText = "[TRŪKSTA] - Nerastas Virtualus Serveris"
         $vmColor = "Red"
+        $diskText = "---"
+        $diskColor = "Gray"
     }
 
     $resourceResults += [PSCustomObject]@{ Name = "Virtualus Serveris"; Text = $vmText; Color = $vmColor }
+    if ($vm) {
+        $resourceResults += [PSCustomObject]@{ Name = " - Duomenų diskas"; Text = $diskText; Color = $diskColor }
+    }
 
     # --- 2. FUNCTION APP ---
     $funcApp = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites" | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
@@ -73,29 +90,23 @@ if ($targetRG) {
     if ($funcApp) {
         $resourceResults += [PSCustomObject]@{
             Name  = "Function App"
-            Text  = "[OK] - $($funcApp.Name) ($($funcApp.Location))"
+            Text  = "[OK] - $($funcApp.Name)"
             Color = "Green"
         }
 
-        # --- 3. FUNKCIJOS (NAUDOJANT AZURE CLI) ---
-        # Tai yra "branduolinis" variantas. Jei PowerShell nemato, CLI pamatys.
-        # Cloud Shell aplinkoje 'az' komanda yra instaliuota standartiškai.
-        
-        Write-Host "   (Tikrinamas funkcijų sąrašas per Azure CLI...)" -ForegroundColor DarkGray
+        # --- 3. FUNKCIJOS (AZURE CLI METODAS) ---
+        Write-Host "   (Tikrinama funkcijų būsena...)" -ForegroundColor DarkGray
         
         try {
-            # Gauname JSON sąrašą tiesiai iš API
-            $cliOutput = az functionapp function list --resource-group $targetRG.ResourceGroupName --name $funcApp.Name --output json | ConvertFrom-Json
+            $cliOutput = az functionapp function list --resource-group $targetRG.ResourceGroupName --name $funcApp.Name --output json 2>$null | ConvertFrom-Json
         } catch {
             $cliOutput = @()
         }
 
         # HTTP (-fun1)
-        # Azure CLI grąžina pilną ID, pvz: .../functions/Bartukas-fun1
         $fun1 = $cliOutput | Where-Object { $_.name -like "*/$($Setup.LastName)-fun1" -or $_.name -like "*/*-fun1" } | Select-Object -First 1
         
         if ($fun1) {
-            # Išvalome vardą
             $cleanName = $fun1.name.Split('/')[-1]
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[OK] - $cleanName"; Color = "Green" }
         } else {
@@ -134,7 +145,13 @@ Write-Host "==================================================" -ForegroundColor
 
 $i = 1
 foreach ($res in $resourceResults) {
-    $label = "$i. $($res.Name):"
+    if ($res.Name -match "^ -") {
+        # Papildomas diskas (įtrauka)
+        $label = "   $($res.Name):"
+    } else {
+        $label = "$i. $($res.Name):"
+        $i++
+    }
     
     $targetWidth = 30
     $neededSpaces = $targetWidth - $label.Length
@@ -143,7 +160,6 @@ foreach ($res in $resourceResults) {
     
     Write-Host "$label$padding" -NoNewline
     Write-Host $res.Text -ForegroundColor $res.Color
-    $i++
 }
 
 Write-Host "==================================================" -ForegroundColor Gray
