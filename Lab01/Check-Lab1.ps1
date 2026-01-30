@@ -1,119 +1,75 @@
-# --- KONFIGŪRACIJOS GAVIMAS ---
-# 1. Bendra konfigūracija (Global)
-$globalUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/global.json"
-# 2. Šio laboratorinio konfigūracija (Local)
-$localUrl  = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
-
-# Priverstinis TLS 1.2 protokolas (saugumo reikalavimas atsisiuntimui)
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
+# --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
+# Atsisiunčiame "smegenis" (common.ps1), kurios moka identifikuoti studentą ir nuskaityti JSON
 try {
-    # Atsisiunčiame abu failus
-    $globalConfig = Invoke-RestMethod -Uri $globalUrl -ErrorAction Stop
-    $localConfig  = Invoke-RestMethod -Uri $localUrl -ErrorAction Stop
+    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
 } catch {
-    Write-Error "Nepavyko atsisiųsti konfigūracijos failų. Patikrinkite interneto ryšį."
+    Write-Error "Nepavyko užkrauti bazinių funkcijų. Patikrinkite interneto ryšį."
     exit
 }
 
-# --- NAUDOJAME KINTAMUOSIUS IŠ FAILO ---
-# Paimame iš GLOBAL
-$destytojoEmail = $globalConfig.InstructorEmail
-$university       = $globalConfig.KaunoKolegija
-$moduleName        = $globalConfig.ModuleName
+# --- 2. INICIJUOJAME DARBĄ ---
+# Ši eilutė atlieka: JSON atsisiuntimą, TLS nustatymą, studento atpažinimą, ekrano valymą
+# SVARBU: Naudojame jūsų pageidaujamą failo pavadinimą "...-config.json"
+$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
 
-# Paimame iš LOCAL (Lab1)
-$labTitle     = $localConfig.LabName
-$regexPattern = $localConfig.NamingPattern
-$roleToCheck  = $localConfig.RoleToCheck
+# Išsiimame konfigūracijas patogesniam naudojimui
+$GlobCfg = $Setup.GlobalConfig
+$LocCfg  = $Setup.LocalConfig
 
+# --- 3. SPECIFINĖ LAB 1 LOGIKA ---
 
-Clear-Host
-Write-Host "--- $labTitle ---" -ForegroundColor Cyan
-Write-Host "Vykdoma konfigūracijos analizė..." -ForegroundColor Gray
-
-# 1. Tikriname prenumeratos pavadinimą
+# A. TIKRINAME PRENUMERATĄ
 $context = Get-AzContext
-if (-not $context) {
-    Write-Error "Neprisijungta prie Azure! Prašome perkrauti Cloud Shell."
-    exit
-}
 $subName = $context.Subscription.Name
-# Regex: Tikrina ar yra formatas pagal konfigūraciją
-$isNameCorrect = $subName -match $regexPattern
+$isNameCorrect = $subName -match $LocCfg.NamingPattern
 
-Write-Host "`n1. Prenumeratos pavadinimas: $subName" -NoNewline
+Write-Host "1. Prenumeratos pavadinimas: $subName" -NoNewline
 if ($isNameCorrect) {
     Write-Host " [OK]" -ForegroundColor Green
     $res1 = "TEISINGAS ($subName)"
 } else {
-    Write-Host " [NETINKAMAS FORMATAS]" -ForegroundColor Red
+    Write-Host " [NETINKAMAS]" -ForegroundColor Red
     Write-Host "   -> Reikalaujama: Grupė-Vardas-Pavardė (pvz. PI23-Jonas-Jonaitis)" -ForegroundColor Yellow
     $res1 = "NETEISINGAS ($subName)"
 }
 
-# 2. Tikriname dėstytojo teises
-Write-Host "`n2. Ieškoma vartotojo ($destytojoEmail) teisių..." -NoNewline
+# B. TIKRINAME DĖSTYTOJO TEISES
+# Naudojame Global config reikšmes (InstructorEmailMatch), kad nereikėtų hardcodinti vardo
+Write-Host "2. Dėstytojo ($($GlobCfg.InstructorEmailMatch)...) teisės:" -NoNewline
 try {
-    # Ieškome specifinės rolės priskyrimo
     $assignments = Get-AzRoleAssignment -IncludeClassicAdministrators -ErrorAction SilentlyContinue
-    $destytojoRole = $assignments | Where-Object { $_.SignInName -eq $destytojoEmail -or $_.DisplayName -match "Mantas Bartkevičius" }
     
-    if ($destytojoRole) {
-        # Tikriname ar rolė yra Contributor
-        if ($destytojoRole.RoleDefinitionName -eq $roleToCheck ) {
-            Write-Host " [OK]" -ForegroundColor Green
-            $res2 = "PRISKIRTA ($roleToCheck)"
-        } else {
-            Write-Host " [RASTA KITA ROLĖ: $($destytojoRole.RoleDefinitionName)]" -ForegroundColor Yellow
-            $res2 = "NETINKAMA ROLĖ ($($destytojoRole.RoleDefinitionName))"
-        }
+    # Ieškome pagal dalinį atitikimą (Email arba DisplayName) ir Rolę
+    $destytojas = $assignments | Where-Object { 
+        ($_.SignInName -match $GlobCfg.InstructorEmailMatch -or $_.DisplayName -match $GlobCfg.InstructorEmailMatch) -and 
+        $_.RoleDefinitionName -eq $GlobCfg.RoleToCheck 
+    }
+    
+    if ($destytojas) {
+        Write-Host " [OK]" -ForegroundColor Green
+        $res2 = "PRISKIRTA ($($GlobCfg.RoleToCheck))"
     } else {
         Write-Host " [NERASTA]" -ForegroundColor Red
-        $res2 = "VARTOTOJAS NERASTAS ARBA NĖRA TEISIŲ"
+        $res2 = "DĖSTYTOJAS NERASTAS ARBA NETINKAMA ROLĖ"
     }
 } catch {
-    Write-Host " [KLAIDA]" -ForegroundColor Red
-    $res2 = "KLAIDA TIKRINANT ($($_.Exception.Message))"
+    $res2 = "KLAIDA TIKRINANT"
 }
 
-# --- REZULTATŲ GENERAVIMAS ---
+# --- 4. ATASKAITA ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
-$studentEmail = $null
-
-# 1 BŪDAS: Tikriname specialų Cloud Shell aplinkos kintamąjį (Patikimiausias)
-if ($env:ACC_USER_NAME -and $env:ACC_USER_NAME -match "@") {
-    $studentEmail = $env:ACC_USER_NAME
-}
-
-# 2 BŪDAS: Jei kintamojo nėra, bandome per Azure CLI (User Name)
-if (-not $studentEmail) {
-    try {
-        $cliUser = az account show --query "user.name" -o tsv 2>$null
-        if ($cliUser -and $cliUser -match "@" -and $cliUser -notmatch "MSI@") {
-            $studentEmail = $cliUser
-        }
-    } catch {}
-}
-
-# 3 BŪDAS: Jei vis tiek tuščia, imame Context ID (Techninis/MSI)
-if (-not $studentEmail) {
-    $studentEmail = "$($context.Account.Id) (Cloud Shell Identity)"
-}
-
 $report = @"
 ==================================================
-$university | $moduleName 
-$labTitle
+$($Setup.HeaderTitle)
+$($LocCfg.LabName)
 Data: $date
-Studentas: $studentEmail
+Studentas: $($Setup.StudentEmail)
 ==================================================
 1. Prenumeratos pavadinimas: $res1
 2. Dėstytojo prieiga:        $res2
 ==================================================
 "@
 
-# Išvedimas tik į ekraną
-Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite ekrano nuotrauką) ---" -ForegroundColor Cyan
+Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
 Write-Host $report
 Write-Host ""
