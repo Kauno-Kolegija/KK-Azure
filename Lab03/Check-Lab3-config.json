@@ -1,0 +1,14 @@
+{
+  "LabName": "LAB 3: Virtualūs resursai",
+  "ResourceGroupPattern": "RG-LAB03",
+  "RequiredResources": [
+    {
+      "Name": "Virtualus serveris (VM)",
+      "Type": "Microsoft.Compute/virtualMachines"
+    },
+    {
+      "Name": "Function App (Svetainė)",
+      "Type": "Microsoft.Web/sites"
+    }
+  ]
+}
