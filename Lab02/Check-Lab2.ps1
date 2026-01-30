@@ -1,6 +1,9 @@
-# --- NUORODOS ---
+# --- KONFIGŪRACIJOS GAVIMAS ---
+# 1. Bendra konfigūracija (Global)
 $globalUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/global.json"
+# 2. Šio laboratorinio konfigūracija (Local)
 $localUrl  = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
+
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
