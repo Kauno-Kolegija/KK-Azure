@@ -1,6 +1,6 @@
 # --- NUORODOS ---
 $globalUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/global.json"
-$localUrl  = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/lab2.json"
+$localUrl  = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
