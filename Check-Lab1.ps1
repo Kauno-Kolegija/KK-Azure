@@ -1,6 +1,6 @@
 # --- KONFIGŪRACIJOS GAVIMAS ---
 # Pakeiskite šią nuorodą į savo organizacijos repozitorijos config failo RAW nuorodą
-$configUrl = "https://raw.githubusercontent.com/JUSU_ORG/REPOZITORIJA/main/lab1-config.json"
+$configUrl = "https://raw.githubusercontent.com/JUSU_ORG/REPOZITORIJA/main/Check-Lab1-config.json"
 
 try {
     # Atsisiunčiame ir konvertuojame JSON į PowerShell objektą
