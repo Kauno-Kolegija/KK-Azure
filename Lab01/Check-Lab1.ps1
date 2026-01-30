@@ -33,11 +33,12 @@ try {
     # Ieškome rolės priskyrimo tyliai
     $assignments = Get-AzRoleAssignment -IncludeClassicAdministrators -ErrorAction SilentlyContinue
     
-    # Filtruojame pagal dėstytojo el. pašto dalį (iš Global) ir Rolę (iš Local)
+    # Filtruojame pagal dėstytojo el. pašto dalį ir Rolę
+    # PATAISYMAS: Pridėtas "Select-Object -First 1", kad paimtų tik vieną įrašą
     $destytojas = $assignments | Where-Object { 
         ($_.SignInName -match $GlobCfg.InstructorEmailMatch -or $_.DisplayName -match $GlobCfg.InstructorEmailMatch) -and 
         $_.RoleDefinitionName -eq $LocCfg.RoleToCheck 
-    }
+    } | Select-Object -First 1
     
     if ($destytojas) {
         $res2Text  = "[OK] - $($destytojas.RoleDefinitionName)"
