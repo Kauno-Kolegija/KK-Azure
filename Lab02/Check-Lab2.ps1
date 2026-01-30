@@ -54,7 +54,6 @@ if ($targetRG) {
         }
     }
 } else {
-    # Jei nėra grupės, kitiems resursams rašome klaidą
     foreach ($req in $LocCfg.RequiredResources) {
         $resourceResults += [PSCustomObject]@{
             Name  = $req.Name
@@ -75,16 +74,17 @@ Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
 
-# Dinaminis išvedimas su numeracija
+# Dinaminis išvedimas su pataisyta numeracija ir lygiavimu
 $i = 1
 foreach ($res in $resourceResults) {
-    # Formatuojame: "1. Pavadinimas:        "
     $label = "$i. $($res.Name):"
     
-    # Lygiavimas (padding), kad stulpeliai būtų gražūs (iki 30 simbolių)
-    $paddingLength = 30 - $label.Length
-    if ($paddingLength -lt 1) { $paddingLength = 1 }
-    $padding = " " * $paddingLength
+    # PATAISYMAS: Padidintas plotis iki 35 ir pridėta apsauga nuo neigiamų skaičių
+    $targetWidth = 35
+    $neededSpaces = $targetWidth - $label.Length
+    if ($neededSpaces -lt 1) { $neededSpaces = 1 } # Visada bent 1 tarpas
+    
+    $padding = " " * $neededSpaces
     
     Write-Host "$label$padding" -NoNewline
     Write-Host $res.Text -ForegroundColor $res.Color
