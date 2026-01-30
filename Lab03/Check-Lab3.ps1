@@ -7,19 +7,21 @@ try {
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
+# DĖMESIO: Čia pakeistas failo pavadinimas į jūsų nurodytą
 $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/Check-Lab3-config.json"
 $LocCfg = $Setup.LocalConfig
 
 # --- 3. DUOMENŲ RINKIMAS ---
 
 # A. Randame Resursų grupę
-$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
+# Ieškome grupės pagal jūsų konfigūraciją (RG-LAB03)
+$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB03" } | Select-Object -First 1
 
 if ($targetRG) {
     $rgText  = "[OK] - $($targetRG.ResourceGroupName)"
     $rgColor = "Green"
 } else {
-    $rgText  = "[KLAIDA] - Nerasta grupė '$($LocCfg.ResourceGroupPattern)...'"
+    $rgText  = "[KLAIDA] - Nerasta grupė RG-LAB03..."
     $rgColor = "Red"
 }
 
@@ -60,40 +62,37 @@ if ($targetRG) {
 
     $resourceResults += [PSCustomObject]@{ Name = "Virtualus Serveris"; Text = $vmText; Color = $vmColor }
 
-    # --- 2. FUNCTION APP (NAUJA LOGIKA) ---
-    # Naudojame Get-AzWebApp, nes tai patikimiau randa Function Apps
-    $webApp = Get-AzWebApp -ResourceGroupName $targetRG.ResourceGroupName | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
+    # --- 2. FUNCTION APP ---
+    # Ieškome tiesiogiai per resursus, ignoruojant WebApp komandas
+    $funcApp = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites" | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
     
-    if ($webApp) {
+    if ($funcApp) {
         $resourceResults += [PSCustomObject]@{
             Name  = "Function App"
-            Text  = "[OK] - $($webApp.Name) ($($webApp.Location))"
+            Text  = "[OK] - $($funcApp.Name) ($($funcApp.Location))"
             Color = "Green"
         }
 
-        # --- 3. FUNKCIJOS VIDUJE (NAUJA LOGIKA) ---
-        # Naudojame specialią komandą funkcijų sąrašui gauti
-        try {
-            $appFunctions = Get-AzWebAppFunction -ResourceGroupName $targetRG.ResourceGroupName -Name $webApp.Name -ErrorAction SilentlyContinue
-        } catch {
-            $appFunctions = @()
-        }
+        # --- 3. FUNKCIJOS VIDUJE ---
+        # Ieškome VISŲ resursų, kurių tipas yra 'sites/functions' toje grupėje
+        # Tai apeina "cold start" problemą
+        $allFunctions = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites/functions"
 
         # HTTP (-fun1)
-        $fun1 = $appFunctions | Where-Object { $_.Name -like "*-fun1" } | Select-Object -First 1
+        $fun1 = $allFunctions | Where-Object { $_.Name -like "*-fun1" } | Select-Object -First 1
         if ($fun1) {
-            # Išvalome pavadinimą, nes kartais grąžina "AppName/FunctionName"
-            $cleanName = $fun1.Name.Split('/')[-1]
-            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[OK] - $cleanName"; Color = "Green" }
+            # Name būna formatu "AppVardas/FunkcijosVardas", imame tik galūnę
+            $fName = $fun1.Name.Split('/')[-1]
+            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[OK] - $fName"; Color = "Green" }
         } else {
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (HTTP)"; Text = "[TRŪKSTA] - Nerasta funkcija *-fun1"; Color = "Red" }
         }
 
         # Timer (-fun2)
-        $fun2 = $appFunctions | Where-Object { $_.Name -like "*-fun2" } | Select-Object -First 1
+        $fun2 = $allFunctions | Where-Object { $_.Name -like "*-fun2" } | Select-Object -First 1
         if ($fun2) {
-            $cleanName = $fun2.Name.Split('/')[-1]
-            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[OK] - $cleanName"; Color = "Green" }
+            $fName = $fun2.Name.Split('/')[-1]
+            $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[OK] - $fName"; Color = "Green" }
         } else {
             $resourceResults += [PSCustomObject]@{ Name = "Funkcija (Timer)"; Text = "[TRŪKSTA] - Nerasta funkcija *-fun2"; Color = "Red" }
         }
@@ -114,7 +113,7 @@ $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Gray
 Write-Host "$($Setup.HeaderTitle)"
-Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
+if ($LocCfg.LabName) { Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow } else { Write-Host "LAB 3: Compute" -ForegroundColor Yellow }
 Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
