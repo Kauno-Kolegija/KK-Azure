@@ -1,75 +1,73 @@
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
-# Atsisiunčiame "smegenis" (common.ps1), kurios moka identifikuoti studentą ir nuskaityti JSON
 try {
     irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
 } catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų. Patikrinkite interneto ryšį."
+    Write-Error "Nepavyko užkrauti bazinių funkcijų."
     exit
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-# Ši eilutė atlieka: JSON atsisiuntimą, TLS nustatymą, studento atpažinimą, ekrano valymą
-# SVARBU: Naudojame jūsų pageidaujamą failo pavadinimą "...-config.json"
+# Setup grąžina visus kintamuosius ir išveda pradinę antraštę
 $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
 
-# Išsiimame konfigūracijas patogesniam naudojimui
 $GlobCfg = $Setup.GlobalConfig
 $LocCfg  = $Setup.LocalConfig
 
-# --- 3. SPECIFINĖ LAB 1 LOGIKA ---
+# --- 3. TYLUS TIKRINIMAS (Be išvedimo į ekraną) ---
 
-# A. TIKRINAME PRENUMERATĄ
+# A. Prenumeratos tikrinimas
 $context = Get-AzContext
 $subName = $context.Subscription.Name
 $isNameCorrect = $subName -match $LocCfg.NamingPattern
 
-Write-Host "1. Prenumeratos pavadinimas: $subName" -NoNewline
 if ($isNameCorrect) {
-    Write-Host " [OK]" -ForegroundColor Green
-    $res1 = "TEISINGAS ($subName)"
+    $res1Text  = "[OK] - $subName"
+    $res1Color = "Green"
 } else {
-    Write-Host " [NETINKAMAS]" -ForegroundColor Red
-    Write-Host "   -> Reikalaujama: Grupė-Vardas-Pavardė (pvz. PI23-Jonas-Jonaitis)" -ForegroundColor Yellow
-    $res1 = "NETEISINGAS ($subName)"
+    $res1Text  = "[KLAIDA] - $subName (Netinkamas formatas)"
+    $res1Color = "Red"
 }
 
-# B. TIKRINAME DĖSTYTOJO TEISES
-# Naudojame Global config reikšmes (InstructorEmailMatch), kad nereikėtų hardcodinti vardo
-Write-Host "2. Dėstytojo ($($GlobCfg.InstructorEmailMatch)...) teisės:" -NoNewline
+# B. Dėstytojo teisių tikrinimas
 try {
+    # Ieškome rolės priskyrimo tyliai
     $assignments = Get-AzRoleAssignment -IncludeClassicAdministrators -ErrorAction SilentlyContinue
     
-    # Ieškome pagal dalinį atitikimą (Email arba DisplayName) ir Rolę
+    # Filtruojame pagal dėstytojo el. pašto dalį (iš Global) ir Rolę (iš Local)
     $destytojas = $assignments | Where-Object { 
         ($_.SignInName -match $GlobCfg.InstructorEmailMatch -or $_.DisplayName -match $GlobCfg.InstructorEmailMatch) -and 
         $_.RoleDefinitionName -eq $LocCfg.RoleToCheck 
     }
     
     if ($destytojas) {
-        Write-Host " [OK]" -ForegroundColor Green
-        $res2 = "PRISKIRTA ($($LocCfg.RoleToCheck))"
+        $res2Text  = "[OK] - $($destytojas.RoleDefinitionName)"
+        $res2Color = "Green"
     } else {
-        Write-Host " [NERASTA]" -ForegroundColor Red
-        $res2 = "DĖSTYTOJAS NERASTAS ARBA NETINKAMA ROLĖ"
+        $res2Text  = "[KLAIDA] - Dėstytojas nerastas arba neturi rolės '$($LocCfg.RoleToCheck)'"
+        $res2Color = "Red"
     }
 } catch {
-    $res2 = "KLAIDA TIKRINANT"
+    $res2Text  = "[KLAIDA] - Nepavyko patikrinti teisių"
+    $res2Color = "Red"
 }
 
-# --- 4. ATASKAITA ---
+# --- 4. GALUTINIS REZULTATAS (Ataskaitai) ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
-$report = @"
-==================================================
-$($Setup.HeaderTitle)
-$($LocCfg.LabName)
-Data: $date
-Studentas: $($Setup.StudentEmail)
-==================================================
-1. Prenumeratos pavadinimas: $res1
-2. Dėstytojo prieiga:        $res2
-==================================================
-"@
 
 Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
-Write-Host $report
+Write-Host "==================================================" -ForegroundColor Gray
+Write-Host "$($Setup.HeaderTitle)"
+Write-Host "$($LocCfg.LabName)"
+Write-Host "Data: $date"
+Write-Host "Studentas: $($Setup.StudentEmail)"
+Write-Host "==================================================" -ForegroundColor Gray
+
+# Išvedame suformatuotas eilutes
+Write-Host "1. Prenumeratos pavadinimas: " -NoNewline
+Write-Host $res1Text -ForegroundColor $res1Color
+
+Write-Host "2. Dėstytojo prieiga:        " -NoNewline
+Write-Host $res2Text -ForegroundColor $res2Color
+
+Write-Host "==================================================" -ForegroundColor Gray
 Write-Host ""
