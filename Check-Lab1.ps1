@@ -34,7 +34,7 @@ if (-not $context) {
 }
 $subName = $context.Subscription.Name
 # Regex: Tikrina ar yra formatas "Tekstas-Tekstas-Tekstas" (pvz. PI23-Jonas-Jonaitis)
-isNameCorrect = $subName -match $regexPattern
+$isNameCorrect = $subName -match $regexPattern
 
 Write-Host "`n1. Prenumeratos pavadinimas: $subName" -NoNewline
 if ($isNameCorrect) {
