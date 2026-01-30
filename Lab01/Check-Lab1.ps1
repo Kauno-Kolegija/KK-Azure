@@ -1,23 +1,32 @@
 # --- KONFIGŪRACIJOS GAVIMAS ---
-$configUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
+# 1. Bendra konfigūracija (Global)
+$globalUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/global.json"
+# 2. Šio laboratorinio konfigūracija (Local)
+$localUrl  = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
 
 # Priverstinis TLS 1.2 protokolas (saugumo reikalavimas atsisiuntimui)
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 try {
-    # Atsisiunčiame ir konvertuojame JSON į PowerShell objektą
-    $config = Invoke-RestMethod -Uri $configUrl -ErrorAction Stop
+    # Atsisiunčiame abu failus
+    $globalConfig = Invoke-RestMethod -Uri $globalUrl -ErrorAction Stop
+    $localConfig  = Invoke-RestMethod -Uri $localUrl -ErrorAction Stop
 } catch {
-    Write-Error "Nepavyko atsisiųsti laboratorinio darbo konfigūracijos. Patikrinkite interneto ryšį."
+    Write-Error "Nepavyko atsisiųsti konfigūracijos failų. Patikrinkite interneto ryšį."
     exit
 }
 
 # --- NAUDOJAME KINTAMUOSIUS IŠ FAILO ---
-$destytojoEmail = $config.InstructorEmail
-$regexPattern = $config.NamingPattern
-$university = $config.KaunoKolegija
-$moduleName = $config.ModuleName
-$labTitle = $config.LabName
+# Paimame iš GLOBAL
+$destytojoEmail = $globalConfig.InstructorEmail
+$university       = $globalConfig.KaunoKolegija
+$moduleName        = $globalConfig.ModuleName
+
+# Paimame iš LOCAL (Lab1)
+$labTitle     = $localConfig.LabName
+$regexPattern = $localConfig.NamingPattern
+$roleToCheck  = $localConfig.RoleToCheck
+
 
 Clear-Host
 Write-Host "--- $labTitle ---" -ForegroundColor Cyan
@@ -52,9 +61,9 @@ try {
     
     if ($destytojoRole) {
         # Tikriname ar rolė yra Contributor
-        if ($destytojoRole.RoleDefinitionName -eq "Contributor") {
+        if ($destytojoRole.RoleDefinitionName -eq $roleToCheck ) {
             Write-Host " [OK]" -ForegroundColor Green
-            $res2 = "PRISKIRTA (Contributor)"
+            $res2 = "PRISKIRTA ($roleToCheck)"
         } else {
             Write-Host " [RASTA KITA ROLĖ: $($destytojoRole.RoleDefinitionName)]" -ForegroundColor Yellow
             $res2 = "NETINKAMA ROLĖ ($($destytojoRole.RoleDefinitionName))"
