@@ -1,0 +1,6 @@
+{
+    "InstructorEmail": "Mantas.Bartkevicius@kaunokolegija.lt",
+    "RoleToCheck": "Contributor",
+    "NamingPattern": "^[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+$",
+    "LabName": "Debesų kompiuterija: 1 praktinis darbas (Azure Paskyra)"
+}

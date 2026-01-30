@@ -1,6 +1,24 @@
-# --- NUSTATYMAI ---
-$destytojoEmail = "Mantas.Bartkevicius@kaunokolegija.lt"
+# --- KONFIGŪRACIJOS GAVIMAS ---
+# Pakeiskite šią nuorodą į savo organizacijos repozitorijos config failo RAW nuorodą
+$configUrl = "https://raw.githubusercontent.com/JUSU_ORG/REPOZITORIJA/main/lab1-config.json"
+
+try {
+    # Atsisiunčiame ir konvertuojame JSON į PowerShell objektą
+    $config = Invoke-RestMethod -Uri $configUrl -ErrorAction Stop
+} catch {
+    Write-Error "Nepavyko atsisiųsti laboratorinio darbo konfigūracijos. Patikrinkite interneto ryšį."
+    exit
+}
+
+# --- NAUDOJAME KINTAMUOSIUS IŠ FAILO ---
+$destytojoEmail = $config.InstructorEmail
+$regexPattern = $config.NamingPattern
+$labTitle = $config.LabName
 $ataskaitosFailas = "Lab1_Rezultatas.txt"
+Clear-Host
+Write-Host "--- $labTitle ---" -ForegroundColor Cyan
+Write-Host "Konfigūracija sėkmingai įkelta." -ForegroundColor Gray
+
 
 # Priverstinis TLS 1.2 protokolas (saugumo reikalavimas atsisiuntimui)
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -17,7 +35,7 @@ if (-not $context) {
 }
 $subName = $context.Subscription.Name
 # Regex: Tikrina ar yra formatas "Tekstas-Tekstas-Tekstas" (pvz. PI23-Jonas-Jonaitis)
-$isNameCorrect = $subName -match "^[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+" 
+isNameCorrect = $subName -match $regexPattern
 
 Write-Host "`n1. Prenumeratos pavadinimas: $subName" -NoNewline
 if ($isNameCorrect) {
