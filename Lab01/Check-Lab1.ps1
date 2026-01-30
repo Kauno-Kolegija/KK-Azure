@@ -1,5 +1,5 @@
 # --- KONFIGŪRACIJOS GAVIMAS ---
-$configUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Check-Lab1-config.json"
+$configUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
 
 # Priverstinis TLS 1.2 protokolas (saugumo reikalavimas atsisiuntimui)
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

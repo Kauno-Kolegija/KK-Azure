@@ -4,5 +4,5 @@
     "NamingPattern": "^[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+$",
     "KaunoKolegija": "KAUNO KOLEGIJA",
     "ModuleName": "DEBESŲ KOMPIUTERIJA",
-    "LabName": "Lab 1: Azure Paskyra"
+    "LabName": "LAB 1: Azure Paskyra"
 }

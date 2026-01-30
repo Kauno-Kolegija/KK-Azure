@@ -1,3 +1,5 @@
+```mermaid
+graph TD
 ---
 config:
   layout: fixed
@@ -13,3 +15,5 @@ flowchart TB
     style C fill:#5FA7FF,stroke:#365F91,stroke-width:2px
     style E fill:#5FA7FF,stroke:#365F91,stroke-width:2px
     style D fill:#dff0d8,stroke:#3c763d,stroke-width:2px
+
+```
