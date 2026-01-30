@@ -7,34 +7,36 @@ try {
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-# Atsisiunčiame konfigūraciją ir identifikuojame studentą
 $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
-
 $LocCfg = $Setup.LocalConfig
 
-# --- 3. TYLUS TIKRINIMAS (Be išvedimo į ekraną) ---
+# --- 3. TYLUS TIKRINIMAS ---
 
 # A. Randame Resursų grupę
-# Ieškome pirmos grupės, kuri atitinka šabloną (pvz. RG-LAB02-...)
 $targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 if ($targetRG) {
     $rgText  = "[OK] - $($targetRG.ResourceGroupName)"
     $rgColor = "Green"
 } else {
-    $rgText  = "[KLAIDA] - Nerasta grupė pagal šabloną '$($LocCfg.ResourceGroupPattern)'"
+    $rgText  = "[KLAIDA] - Nerasta grupė '$($LocCfg.ResourceGroupPattern)...'"
     $rgColor = "Red"
 }
 
-# B. Tikriname resursus (Web App, Storage ir t.t. iš JSON)
+# B. Tikriname resursus
 $resourceResults = @()
 
+# Visada pridedame RG kaip pirmą elementą į sąrašą
+$resourceResults += [PSCustomObject]@{
+    Name  = "Resursų grupė"
+    Text  = $rgText
+    Color = $rgColor
+}
+
 if ($targetRG) {
-    # Pasiimame visus resursus toje grupėje vienu ypu
     $allResources = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName
     
     foreach ($req in $LocCfg.RequiredResources) {
-        # Ieškome specifinio tipo (pvz. Microsoft.Web/sites)
         $found = $allResources | Where-Object { $_.ResourceType -eq $req.Type } | Select-Object -First 1
         
         if ($found) {
@@ -52,7 +54,7 @@ if ($targetRG) {
         }
     }
 } else {
-    # Jei nėra grupės, visi resursai automatiškai neegzistuoja
+    # Jei nėra grupės, kitiems resursams rašome klaidą
     foreach ($req in $LocCfg.RequiredResources) {
         $resourceResults += [PSCustomObject]@{
             Name  = $req.Name
@@ -62,7 +64,7 @@ if ($targetRG) {
     }
 }
 
-# --- 4. GALUTINIS REZULTATAS (Ataskaitai) ---
+# --- 4. GALUTINIS REZULTATAS ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
 Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
@@ -73,17 +75,16 @@ Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
 
-# 1. Išvedame Resursų grupę
-Write-Host "1. Resursų grupė:            " -NoNewline
-Write-Host $rgText -ForegroundColor $rgColor
-
-# 2. Išvedame kitus resursus dinamiškai
-$i = 2
+# Dinaminis išvedimas su numeracija
+$i = 1
 foreach ($res in $resourceResults) {
-    # Formatuojame tarpus, kad lygiuotųsi gražiai
+    # Formatuojame: "1. Pavadinimas:        "
     $label = "$i. $($res.Name):"
-    $padding = " " * (25 - $label.Length) # Dinaminis lygiavimas
-    if ($padding.Length -lt 1) { $padding = " " }
+    
+    # Lygiavimas (padding), kad stulpeliai būtų gražūs (iki 30 simbolių)
+    $paddingLength = 30 - $label.Length
+    if ($paddingLength -lt 1) { $paddingLength = 1 }
+    $padding = " " * $paddingLength
     
     Write-Host "$label$padding" -NoNewline
     Write-Host $res.Text -ForegroundColor $res.Color
