@@ -2,7 +2,7 @@
     "InstructorEmail": "Mantas.Bartkevicius@kaunokolegija.lt",
     "RoleToCheck": "Contributor",
     "NamingPattern": "^[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+$",
-    "KaunoKolegija": "Kauno kolegija",
-    "ModuleName": "Debesų kompiuterija",
+    "KaunoKolegija": "KAUNO KOLEGIJA",
+    "ModuleName": "DEBESŲ KOMPIUTERIJA",
     "LabName": "Lab 1: Azure Paskyra"
 }
