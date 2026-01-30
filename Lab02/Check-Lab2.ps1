@@ -26,7 +26,7 @@ if ($targetRG) {
 # B. Tikriname resursus
 $resourceResults = @()
 
-# Visada pridedame RG kaip pirmą elementą į sąrašą
+# RG visada pirmas
 $resourceResults += [PSCustomObject]@{
     Name  = "Resursų grupė"
     Text  = $rgText
@@ -69,20 +69,22 @@ $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Gray
 Write-Host "$($Setup.HeaderTitle)"
-Write-Host "$($LocCfg.LabName)"
+
+# Čia pakeista: Lab pavadinimas atskirai ir geltonai
+Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
+
 Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
 
-# Dinaminis išvedimas su pataisyta numeracija ir lygiavimu
+# Dinaminis išvedimas
 $i = 1
 foreach ($res in $resourceResults) {
     $label = "$i. $($res.Name):"
     
-    # PATAISYMAS: Padidintas plotis iki 35 ir pridėta apsauga nuo neigiamų skaičių
     $targetWidth = 35
     $neededSpaces = $targetWidth - $label.Length
-    if ($neededSpaces -lt 1) { $neededSpaces = 1 } # Visada bent 1 tarpas
+    if ($neededSpaces -lt 1) { $neededSpaces = 1 }
     
     $padding = " " * $neededSpaces
     

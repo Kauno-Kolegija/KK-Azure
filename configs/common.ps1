@@ -1,5 +1,3 @@
-# configs/common.ps1
-
 function Initialize-Lab {
     param (
         [string]$LocalConfigUrl
@@ -20,39 +18,30 @@ function Initialize-Lab {
         throw $_
     }
 
-    # 4. Studento Identifikacija (Centralizuota logika!)
+    # 4. Studento Identifikacija
     $context = Get-AzContext
     if (-not $context) { Write-Error "Neprisijungta prie Azure! (Naudokite 'az login')"; exit }
 
     $StudentEmail = $null
-    # Bandome Cloud Shell kintamąjį
     if ($env:ACC_USER_NAME -and $env:ACC_USER_NAME -match "@") {
         $StudentEmail = $env:ACC_USER_NAME
-    } 
-    # Jei ne, bandome CLI
-    elseif (Get-Command az -ErrorAction SilentlyContinue) {
+    } elseif (Get-Command az -ErrorAction SilentlyContinue) {
         try { $StudentEmail = az account show --query "user.name" -o tsv 2>$null } catch {}
     }
     
-    # Jei vis tiek neradome, imame ID
     if (-not $StudentEmail -or $StudentEmail -match "MSI@") {
         $StudentEmail = "$($context.Account.Id) (System Identity)"
     }
 
-    # 5. Antraštės išvedimas
+    # 5. Išvedimas (Minimalistinis)
     Clear-Host
-    $Header = "$($GlobalConfig.KaunoKolegija) | $($GlobalConfig.ModuleName)"
-    Write-Host "--- $Header ---" -ForegroundColor Cyan
-    Write-Host "--- $($LocalConfig.LabName) ---" -ForegroundColor Yellow
-    Write-Host "Studentas: $StudentEmail" -ForegroundColor DarkGray
-    Write-Host "Vykdoma patikra..." -ForegroundColor Gray
-    Write-Host ""
+    # Čia pakeista į geltoną spalvą ir nuimta kita info
+    Write-Host "Vykdoma patikra..." -ForegroundColor Yellow
 
-    # 6. Grąžiname objektą su visais duomenimis atgal į Lab skriptą
     return [PSCustomObject]@{
         GlobalConfig = $GlobalConfig
         LocalConfig  = $LocalConfig
         StudentEmail = $StudentEmail
-        HeaderTitle  = $Header
+        HeaderTitle  = "$($GlobalConfig.KaunoKolegija) | $($GlobalConfig.ModuleName)"
     }
 }
