@@ -71,20 +71,24 @@ try {
 # --- REZULTATŲ GENERAVIMAS ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
-# NAUJAS KODAS: Bandome gauti tikrąjį vartotoją per Azure AD
+# NAUJAS BŪDAS: Naudojame Azure CLI, nes jis patikimiausiai rodo "Human Identity" Cloud Shell'e
 try {
-    $adUser = Get-AzADSignedinUser -ErrorAction Stop
-    $studentEmail = $adUser.UserPrincipalName
+    # Bandome gauti per Azure CLI (tai veikia net kai PowerShell rodo MSI)
+    $cliUser = az account show --query "user.name" -o tsv 2>$null
+    
+    if ($cliUser -and $cliUser -ne "" -and $cliUser -notmatch "MSI@") {
+        $studentEmail = $cliUser
+    } else {
+        # Atsarginis variantas: Aplinkos kintamasis
+        $studentEmail = $env:ACC_USER_NAME
+    }
 } catch {
-    # Jei nepavyksta (pvz., dėl teisių), naudojame Context ID kaip atsarginį variantą
     $studentEmail = $context.Account.Id
 }
 
-# Jei vis tiek rodo MSI, bandome ištraukti iš Subscription Context (kartais ten lieka pėdsakas)
-if ($studentEmail -match "^MSI@") {
-     $studentEmail = "$($context.Account.Id) (Cloud Shell System Identity)"
-     # Galima bandyti paimti iš environment kintamųjų, jei Cloud Shell juos turi
-     if ($env:ACC_USER_NAME) { $studentEmail = $env:ACC_USER_NAME }
+# Jei vis tiek nepavyko ir kintamasis tuščias, naudojame techninį ID
+if (-not $studentEmail) {
+    $studentEmail = "$($context.Account.Id) (Cloud Shell Identity)"
 }
 
 $report = @"
