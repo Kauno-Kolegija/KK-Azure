@@ -1,6 +1,9 @@
 # --- KONFIGŪRACIJOS GAVIMAS ---
 $configUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Check-Lab1-config.json"
 
+# Priverstinis TLS 1.2 protokolas (saugumo reikalavimas atsisiuntimui)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 try {
     # Atsisiunčiame ir konvertuojame JSON į PowerShell objektą
     $config = Invoke-RestMethod -Uri $configUrl -ErrorAction Stop
@@ -13,17 +16,9 @@ try {
 $destytojoEmail = $config.InstructorEmail
 $regexPattern = $config.NamingPattern
 $labTitle = $config.LabName
-$ataskaitosFailas = "Lab1_Rezultatas.txt"
+
 Clear-Host
 Write-Host "--- $labTitle ---" -ForegroundColor Cyan
-Write-Host "Konfigūracija sėkmingai įkelta." -ForegroundColor Gray
-
-
-# Priverstinis TLS 1.2 protokolas (saugumo reikalavimas atsisiuntimui)
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-Clear-Host
-Write-Host "--- 1 Laboratorinio darbo patikra (Azure) ---" -ForegroundColor Cyan
 Write-Host "Vykdoma konfigūracijos analizė..." -ForegroundColor Gray
 
 # 1. Tikriname prenumeratos pavadinimą
@@ -33,7 +28,7 @@ if (-not $context) {
     exit
 }
 $subName = $context.Subscription.Name
-# Regex: Tikrina ar yra formatas "Tekstas-Tekstas-Tekstas" (pvz. PI23-Jonas-Jonaitis)
+# Regex: Tikrina ar yra formatas pagal konfigūraciją
 $isNameCorrect = $subName -match $regexPattern
 
 Write-Host "`n1. Prenumeratos pavadinimas: $subName" -NoNewline
@@ -86,10 +81,7 @@ Studentas: $studentEmail
 ==================================================
 "@
 
-# Išvedimas
-Write-Host "`n--- GALUTINIS REZULTATAS ---" -ForegroundColor Cyan
+# Išvedimas tik į ekraną
+Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite ekrano nuotrauką) ---" -ForegroundColor Cyan
 Write-Host $report
-$report | Out-File $ataskaitosFailas -Encoding UTF8
-
-Write-Host "`nAtaskaita sugeneruota faile: $ataskaitosFailas" -ForegroundColor Magenta
-Write-Host "Atsisiųskite failą su komanda: download $ataskaitosFailas" -ForegroundColor White
+Write-Host ""
