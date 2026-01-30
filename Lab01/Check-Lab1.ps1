@@ -58,7 +58,7 @@ $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Gray
 Write-Host "$($Setup.HeaderTitle)"
-Write-Host "$($LocCfg.LabName)"
+Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
 Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
