@@ -16,8 +16,37 @@ $LocCfg = $Setup.LocalConfig
 $targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 if ($targetRG) {
-    $rgText  = "[OK] - $($targetRG.ResourceGroupName)"
-    $rgColor = "Green"
+    $allResources = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName
+    
+    foreach ($req in $LocCfg.RequiredResources) {
+        $found = $allResources | Where-Object { $_.ResourceType -eq $req.Type } | Select-Object -First 1
+        
+        if ($found) {
+            # --- PAKEITIMAS: Ištraukiame papildomą info ---
+            $info = ""
+            
+            # Jei tai Storage - parodome SKU (pvz. Standard_LRS)
+            if ($found.ResourceType -like "*storageAccounts*") {
+                $sku = $found.Sku.Name
+                $info = "[$sku]"
+            }
+            
+            # Suformuojame tekstą: [OK] - Vardas (Regionas) [Papildoma info]
+            $finalText = "[OK] - $($found.Name) ($($found.Location)) $info"
+            
+            $resourceResults += [PSCustomObject]@{
+                Name  = $req.Name
+                Text  = $finalText
+                Color = "Green"
+            }
+        } else {
+            $resourceResults += [PSCustomObject]@{
+                Name  = $req.Name
+                Text  = "[TRŪKSTA] - Nerastas resursas"
+                Color = "Red"
+            }
+        }
+    }
 } else {
     $rgText  = "[KLAIDA] - Nerasta grupė '$($LocCfg.ResourceGroupPattern)...'"
     $rgColor = "Red"
