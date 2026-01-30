@@ -1,89 +1,59 @@
-# --- KONFIGŪRACIJOS GAVIMAS ---
-# 1. Bendra konfigūracija (Global)
-$globalUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/global.json"
-# 2. Šio laboratorinio konfigūracija (Local)
-$localUrl  = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
+# Lab02/Check-Lab2.ps1
 
+# --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
+# Atsisiunčiame ir įvykdome common.ps1, kad gautume funkciją 'Initialize-Lab'
+irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# --- 2. INICIJUOJAME DARBĄ ---
+# Ši viena eilutė padaro viską: parsiunčia configus, randa studentą, išvalo ekraną
+$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
 
-# --- DUOMENŲ GAVIMAS ---
-try {
-    $globalConfig = Invoke-RestMethod -Uri $globalUrl -ErrorAction Stop
-    $localConfig  = Invoke-RestMethod -Uri $localUrl -ErrorAction Stop
-} catch {
-    Write-Error "Nepavyko atsisiųsti konfigūracijos."
-    exit
-}
+# Išsiimame kintamuosius patogiam naudojimui
+$LocCfg = $Setup.LocalConfig
+$GlobCfg = $Setup.GlobalConfig
 
-# --- KINTAMIEJI ---
-$labTitle     = $localConfig.LabName
-$rgPattern    = $localConfig.ResourceGroupPattern
-$resourcesReq = $localConfig.RequiredResources
-$headerTitle  = "$($globalConfig.KaunoKolegija) | $($globalConfig.ModuleName)"
+# --- 3. SPECIFINĖ LAB 2 PATIKRA ---
+# Čia rašote tik tai, kas unikalu šiam darbui
 
-Clear-Host
-Write-Host "--- $headerTitle ---" -ForegroundColor Cyan
-Write-Host "--- $labTitle ---" -ForegroundColor Yellow
-Write-Host "Vykdoma resursų paieška..." -ForegroundColor Gray
-
-# 1. IDENTIFIKACIJA
-$context = Get-AzContext
-if (-not $context) { Write-Error "Neprisijungta!"; exit }
-$studentEmail = if ($env:ACC_USER_NAME) { $env:ACC_USER_NAME } else { $context.Account.Id }
-
-# 2. RESURSŲ GRUPĖS PAIEŠKA
-$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $rgPattern } | Select-Object -First 1
+# A. Randame Resursų grupę
+$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 if ($targetRG) {
-    Write-Host "`n1. Resursų grupė (${rgPattern}...):" -NoNewline
+    Write-Host "1. Resursų grupė:" -NoNewline
     Write-Host " RASTA ($($targetRG.ResourceGroupName))" -ForegroundColor Green
     $rgStatus = "OK ($($targetRG.ResourceGroupName))"
-    $rgName = $targetRG.ResourceGroupName
 } else {
-    Write-Host "`n1. Resursų grupė (${rgPattern}...):" -NoNewline
+    Write-Host "1. Resursų grupė:" -NoNewline
     Write-Host " NERASTA" -ForegroundColor Red
-    Write-Host "   -> Būtina sukurti grupę prasidedančia 'RG-LAB02-'" -ForegroundColor Yellow
     $rgStatus = "NERASTA"
-    $rgName = $null
 }
 
-# 3. RESURSŲ TIKRINIMAS GRUPĖJE
+# B. Tikriname resursus (jei grupė yra)
 $resReport = ""
-if ($rgName) {
-    # Gauname visus resursus toje grupėje
-    $allResources = Get-AzResource -ResourceGroupName $rgName
-    
-    foreach ($req in $resourcesReq) {
-        # Ieškome ar yra toks resursas
+if ($targetRG) {
+    $allResources = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName
+    foreach ($req in $LocCfg.RequiredResources) {
         $found = $allResources | Where-Object { $_.ResourceType -eq $req.Type } | Select-Object -First 1
-        
         Write-Host "2. $($req.Name):" -NoNewline
+        
         if ($found) {
-            Write-Host " RASTA ($($found.Name))" -ForegroundColor Green
+            Write-Host " RASTA" -ForegroundColor Green
             $resReport += "$($req.Name): OK`n"
-            
-            # Regiono perspėjimas (jei labai toli)
-            if ($found.Location -notin $localConfig.AllowedRegions) {
-                Write-Host "   -> Dėmesio: Regionas '$($found.Location)' nėra standartinis, bet užskaityta." -ForegroundColor DarkGray
-            }
         } else {
             Write-Host " NERASTA" -ForegroundColor Red
             $resReport += "$($req.Name): TRŪKSTA`n"
         }
     }
-} else {
-    $resReport = "Nėra Resursų grupės - patikra negalima."
 }
 
-# --- ATASKAITA ---
+# --- 4. ATASKAITA ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 $report = @"
 ==================================================
-$headerTitle
-$labTitle
+$($Setup.HeaderTitle)
+$($LocCfg.LabName)
 Data: $date
-Studentas: $studentEmail
+Studentas: $($Setup.StudentEmail)
 ==================================================
 1. Resursų grupė: $rgStatus
 --------------------------------------------------
@@ -93,4 +63,3 @@ $resReport
 
 Write-Host "`n--- GALUTINIS REZULTATAS ---" -ForegroundColor Cyan
 Write-Host $report
-Write-Host ""
