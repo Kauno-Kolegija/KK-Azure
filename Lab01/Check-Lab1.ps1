@@ -42,12 +42,12 @@ try {
     # Ieškome pagal dalinį atitikimą (Email arba DisplayName) ir Rolę
     $destytojas = $assignments | Where-Object { 
         ($_.SignInName -match $GlobCfg.InstructorEmailMatch -or $_.DisplayName -match $GlobCfg.InstructorEmailMatch) -and 
-        $_.RoleDefinitionName -eq $GlobCfg.RoleToCheck 
+        $_.RoleDefinitionName -eq $LocCfg.RoleToCheck 
     }
     
     if ($destytojas) {
         Write-Host " [OK]" -ForegroundColor Green
-        $res2 = "PRISKIRTA ($($GlobCfg.RoleToCheck))"
+        $res2 = "PRISKIRTA ($($LocCfg.RoleToCheck))"
     } else {
         Write-Host " [NERASTA]" -ForegroundColor Red
         $res2 = "DĖSTYTOJAS NERASTAS ARBA NETINKAMA ROLĖ"
