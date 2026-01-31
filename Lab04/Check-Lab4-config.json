@@ -1,6 +1,6 @@
 {
   "LabName": "LAB 4: Networking & Load Balancer",
-  "ResourceGroupPattern": "RG04",
+  "ResourceGroupPattern": "RG-Lab04",
   "RequiredResources": [
     { "Type": "Microsoft.Network/loadBalancers", "Name": "Load Balancer" },
     { "Type": "Microsoft.Compute/availabilitySets", "Name": "Availability Set" }
