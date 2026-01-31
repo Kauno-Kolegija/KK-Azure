@@ -1,8 +1,9 @@
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    # Naudojame ?v=random, kad apeitume cache
+    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1?v=$(Get-Random)" | iex
 } catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
+    Write-Error "Nepavyko užkrauti bazinių funkcijų."
     exit
 }
 
@@ -10,15 +11,14 @@ try {
 $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json"
 $LocCfg = $Setup.LocalConfig
 
-# --- 2. INICIJUOJAME DARBĄ ---
-# Šiam darbui konfigūraciją generuojame dinamiškai, nes studentai naudoja savo vardus RG pavadinime
+# Nustatome vartotoją
 $CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
 if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 
-# Bandome atspėti RG pavadinimą (RG04-*)
-$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -like "RG04-*" } | Sort-Object LastModifiedTime -Descending | Select-Object -First 1
-
 # --- 3. DUOMENŲ RINKIMAS ---
+
+# SVARBU: Ieškome grupės pagal JSON faile nurodytą "ResourceGroupPattern"
+$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Sort-Object LastModifiedTime -Descending | Select-Object -First 1
 
 $resourceResults = @()
 
@@ -27,7 +27,7 @@ if ($targetRG) {
     $rgText  = "[OK] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
     $rgColor = "Green"
 } else {
-    $rgText  = "[KLAIDA] - Nerasta grupė, prasidedanti $targetRG-...'"
+    $rgText  = "[KLAIDA] - Nerasta grupė, kurios pavadinime būtų '$($LocCfg.ResourceGroupPattern)'"
     $rgColor = "Red"
 }
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText; Color = $rgColor }
@@ -44,10 +44,12 @@ if ($targetRG) {
     }
     $resourceResults += [PSCustomObject]@{ Name = "Virtualus Tinklas"; Text = $vnetText; Color = $vnetColor }
 
-    # 3. Load Balancer (Sunkiausia dalis)
+    # 3. Load Balancer
     $lb = Get-AzLoadBalancer -ResourceGroupName $targetRG.ResourceGroupName | Select-Object -First 1
     if ($lb) {
-        $lbText = "[OK] - $($lb.Name) (Frontend IP: $($lb.FrontendIpConfigurations.Count))"
+        $feCount = $lb.FrontendIpConfigurations.Count
+        $beCount = $lb.BackendAddressPools.Count
+        $lbText = "[OK] - $($lb.Name) (Frontend: $feCount, Pools: $beCount)"
         $lbColor = "Green"
     } else {
         $lbText = "[TRŪKSTA] - Nerastas Load Balancer (NLB)"
@@ -61,7 +63,7 @@ if ($targetRG) {
         $avText = "[OK] - $($avSet.Name)"
         $avColor = "Green"
     } else {
-        $avText = "[DĖMESIO] - Nerastas Availability Set (Būtina 'Standard' LB veikimui)"
+        $avText = "[DĖMESIO] - Nerastas Availability Set"
         $avColor = "Yellow"
     }
     $resourceResults += [PSCustomObject]@{ Name = "Availability Set"; Text = $avText; Color = $avColor }
@@ -99,9 +101,10 @@ $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
 Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Gray
-Write-Host "KAUNO KOLEGIJA | LAB 4: Networking"
+Write-Host "$($Setup.HeaderTitle)"
+Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
 Write-Host "Data: $date"
-Write-Host "Vartotojas: $CurrentIdentity"
+Write-Host "Studentas: $CurrentIdentity"
 Write-Host "==================================================" -ForegroundColor Gray
 
 $i = 1
@@ -119,7 +122,4 @@ foreach ($res in $resourceResults) {
 }
 
 Write-Host "==================================================" -ForegroundColor Gray
-if (-not $lb) {
-    Write-Host "Patarimas: Jei nerandate Load Balancer, patikrinkite 'az network lb create' komandą." -ForegroundColor DarkGray
-}
 Write-Host ""
