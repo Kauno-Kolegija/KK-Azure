@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 4 TIKRINIMAS: Networking (Išplėstinis)"
+$ScriptVersion = "LAB 4 TIKRINIMAS: Networking"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -8,9 +8,9 @@ Write-Host "--------------------------------------------------"
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1?v=$(Get-Random)" | iex
+    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
 } catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų."
+    Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
     exit
 }
 
@@ -23,7 +23,7 @@ if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 
 # --- 3. DUOMENŲ RINKIMAS ---
 
-# Ieškome grupės pagal JSON (RG-LAB04)
+# Ieškome grupės pagal JSON konfigūraciją
 $targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Sort-Object LastModifiedTime -Descending | Select-Object -First 1
 
 $resourceResults = @()
@@ -33,7 +33,7 @@ if ($targetRG) {
     $rgText  = "[OK] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
     $rgColor = "Green"
 } else {
-    $rgText  = "[KLAIDA] - Nerasta grupė '$($LocCfg.ResourceGroupPattern)...'"
+    $rgText  = "[KLAIDA] - Nerasta grupė pagal šabloną '$($LocCfg.ResourceGroupPattern)...'"
     $rgColor = "Red"
 }
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText; Color = $rgColor }
@@ -144,7 +144,7 @@ if ($targetRG) {
         $tagged = 0
         foreach ($vm in $vms) {
             if ($vm.AvailabilitySetReference) { $inAvSet++ }
-            # Tikriname ar yra bet kokie tagai (studentas turėjo uždėti Environment=Production)
+            # Tikriname ar yra bet kokie tagai
             if ($vm.Tags.Count -gt 0) { $tagged++ }
         }
 
