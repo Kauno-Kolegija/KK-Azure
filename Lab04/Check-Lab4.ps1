@@ -27,7 +27,7 @@ if ($targetRG) {
     $rgText  = "[OK] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
     $rgColor = "Green"
 } else {
-    $rgText  = "[KLAIDA] - Nerasta grupė, prasidedanti 'RG04-...'"
+    $rgText  = "[KLAIDA] - Nerasta grupė, prasidedanti $targetRG-...'"
     $rgColor = "Red"
 }
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText; Color = $rgColor }
