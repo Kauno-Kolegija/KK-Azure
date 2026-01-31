@@ -1,22 +1,47 @@
 ```mermaid
 ---
 config:
-  layout: fixed
+  layout: dagre
 ---
-flowchart TB
-    Lab["Virtualūs resursai"] --> Part1["1 DALIS: Virtualus Serveris"] & Part2["2 DALIS: Azure Funkcijos"]
-    Part1 --> A1["Kūrimas: Virtualus serveris"] & A2["Valdymas: RDP"] & A3["Keitimas: PowerShell"]
-    Part2 --> B1["Kūrimas: Node.js"] & B2["Fun1: Iškvietimas naršyklėje"] & B3["Fun2: Pagal tvarkaraštį"]
+flowchart LR
+ subgraph NSG_Box["Tinklo Saugos Grupė"]
+        NSG["NSG: Allow HTTP & RDP"]
+  end
+ subgraph AvSet["Availability Set"]
+    direction LR
+        VM1["VM-001 (IIS)"]
+        VM2["VM-002 (IIS)"]
+  end
+ subgraph Subnet["WebSubnet: 10.15.0.0/24"]
+    direction TB
+        AvSet
+  end
+ subgraph VNet["Virtual Network: 10.15.0.0/16"]
+    direction TB
+        NSG_Box
+        Subnet
+  end
+ subgraph AzureCloud["Azure Resursų Grupė"]
+    direction TB
+        LB["Load Balancer (NLB)"]
+        VNet
+  end
+    User["Vartotojas"] -- HTTP --> PublicIP["Viešas IP"]
+    PublicIP --> LB
+    LB -- Port 80 --> VM1 & VM2
+    NSG -.-> Subnet
 
-     Part1:::vm
-     Part2:::func
-     A1:::vm
-     A2:::vm
-     A3:::vm
-     B1:::func
-     B2:::func
-     B3:::func
-    classDef vm fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef func fill:#fff3e0,stroke:#ff6f00,stroke-width:2px
-    classDef user fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,rx:10,ry:10
+     NSG:::nsg
+     VM1:::vm
+     VM2:::vm
+     Subnet:::subnet
+     LB:::lb
+     PublicIP:::internet
+    classDef internet fill:#f9f9f9,stroke:#333,stroke-width:2px
+    classDef azure fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef vnet fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,stroke-dasharray: 5 5
+    classDef subnet fill:#ffffff,stroke:#2e7d32,stroke-width:1px
+    classDef vm fill:#fff3e0,stroke:#ff6f00,stroke-width:2px
+    classDef lb fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef nsg fill:#ffebee,stroke:#c62828,stroke-width:2px,stroke-dasharray: 2 2
 ```
