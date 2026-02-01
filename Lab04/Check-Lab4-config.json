@@ -1,8 +1,10 @@
 {
-  "LabName": "LAB 4: Networking & Load Balancer",
+  "LabName": "LAB 4: Tinklo paslaugos (GUI)",
   "ResourceGroupPattern": "RG-LAB04",
   "RequiredResources": [
-    { "Type": "Microsoft.Network/loadBalancers", "Name": "Load Balancer" },
-    { "Type": "Microsoft.Compute/availabilitySets", "Name": "Availability Set" }
+    { "Type": "Microsoft.Network/virtualNetworks", "Name": "VNet-Admin" },
+    { "Type": "Microsoft.Network/virtualNetworks", "Name": "VNet-Sandelys" },
+    { "Type": "Microsoft.Compute/virtualMachines", "Name": "VM-Admin" },
+    { "Type": "Microsoft.Compute/virtualMachines", "Name": "VM-Sandelis" }
   ]
 }

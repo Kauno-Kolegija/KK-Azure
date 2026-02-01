@@ -1,0 +1,8 @@
+{
+  "LabName": "LAB 5: Tinklo paslaugos (CLI)",
+  "ResourceGroupPattern": "RG-LAB05",
+  "RequiredResources": [
+    { "Type": "Microsoft.Network/loadBalancers", "Name": "Load Balancer" },
+    { "Type": "Microsoft.Compute/availabilitySets", "Name": "Availability Set" }
+  ]
+}
