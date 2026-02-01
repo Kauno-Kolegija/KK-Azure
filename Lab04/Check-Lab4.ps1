@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 04/05 TIKRINIMAS: Defense in Depth (Universalus v3)"
+$ScriptVersion = "LAB 04/05 TIKRINIMAS: Defense in Depth (Final v4)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -15,7 +15,7 @@ try {
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-# Nurodome nuorodą į CONFIG failą (Įsitikinkite, kad šis failas egzistuoja GitHub)
+# Nurodome nuorodą į CONFIG failą
 $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json"
 try {
     $Setup = Initialize-Lab -LocalConfigUrl $ConfigUrl
@@ -32,7 +32,7 @@ if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 # --- 3. DUOMENŲ RINKIMAS ---
 $resourceResults = @()
 
-# A. Resursų Grupės (Universalus tikrinimas: LAB04 arba LAB05)
+# A. Resursų Grupės
 $labRGs = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB0[45]" }
 
 if ($labRGs.Count -ge 3) {
@@ -66,14 +66,13 @@ if ($vnetAdmin -and $vnetSandelys) {
 
 # C. Serveris ir ASG
 $allVMs = Get-AzVM
-# Ieškome lanksčiai: VM-Sandelis, Sand-VM, Sandelis-VM
 $vmSandelys = $allVMs | Where-Object Name -match "VM-Sandelis|Sand-VM|Sandelis-VM" | Select-Object -First 1
 
 if ($vmSandelys) {
     $nicId = $vmSandelys.NetworkProfile.NetworkInterfaces[0].Id
     $nic = Get-AzNetworkInterface -ResourceId $nicId
     
-    # Tikriname ASG (Grupavimą)
+    # Tikriname ASG
     if ($nic.IpConfigurations.ApplicationSecurityGroups.Id -match "ASG-DB-Servers") {
         $asgText = "[OK] - Serveris priskirtas grupei 'ASG-DB-Servers'"
         $asgColor = "Green"
@@ -84,9 +83,14 @@ if ($vmSandelys) {
     $resourceResults += [PSCustomObject]@{ Name = "Serverio grupavimas (ASG)"; Text = $asgText; Color = $asgColor }
 
     # D. Saugumas 1: Serverio Siena (VM NSG - Deny)
-    # Tikriname, ar yra Deny taisyklė ant 1433 ARBA 80 porto
     if ($nic.NetworkSecurityGroup) {
-        $vmNsg = Get-AzNetworkSecurityGroup -ResourceId $nic.NetworkSecurityGroup.Id
+        # PATAISYMAS: Išskaidome ID, kad gautume RG ir Name
+        $nsgIdParts = $nic.NetworkSecurityGroup.Id -split '/'
+        $nsgRg = $nsgIdParts[4]
+        $nsgName = $nsgIdParts[-1]
+        
+        $vmNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgRg -Name $nsgName
+        
         $denyRule = $vmNsg.SecurityRules | Where-Object { 
             ($_.Access -eq "Deny") -and 
             (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80")) 
@@ -111,12 +115,16 @@ if ($vmSandelys) {
 
 # E. Saugumas 2: Tinklo Siena (Subnet NSG - Allow)
 if ($vnetSandelys) {
-    # Randame bet kurį potinklį, kuris turi NSG
     $subnet = $vnetSandelys.Subnets | Where-Object { $_.NetworkSecurityGroup -ne $null } | Select-Object -First 1
     
     if ($subnet) {
-        $subNsg = Get-AzNetworkSecurityGroup -ResourceId $subnet.NetworkSecurityGroup.Id
-        # Tikriname, ar yra Allow taisyklė ant 1433 ARBA 80 porto
+        # PATAISYMAS: Išskaidome ID
+        $nsgIdParts = $subnet.NetworkSecurityGroup.Id -split '/'
+        $nsgRg = $nsgIdParts[4]
+        $nsgName = $nsgIdParts[-1]
+
+        $subNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgRg -Name $nsgName
+        
         $allowRule = $subNsg.SecurityRules | Where-Object { 
             ($_.Access -eq "Allow") -and 
             (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80")) 
