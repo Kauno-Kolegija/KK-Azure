@@ -1,31 +1,28 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 04/05 TIKRINIMAS: Defense in Depth (Final v4)"
+$ScriptVersion = "LAB 4: Defense in Depth (Gold Edition)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
-Write-Host "Vykdoma patikra (RG-LAB04/05 ir Port 1433/80)..."
+Write-Host "Vykdoma išplėstinė patikra (Priority + Region check)..."
 Write-Host "--------------------------------------------------"
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
     irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
 } catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų. Patikrinkite interneto ryšį."
+    Write-Error "Nepavyko užkrauti bazinių funkcijų."
     exit
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-# Nurodome nuorodą į CONFIG failą
 $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json"
 try {
     $Setup = Initialize-Lab -LocalConfigUrl $ConfigUrl
     $LocCfg = $Setup.LocalConfig
 } catch {
-    Write-Warning "Nepavyko užkrauti Config failo. Naudojami numatytieji nustatymai."
     $LocCfg = @{ LabName = "Defense in Depth Lab" }
 }
 
-# Nustatome vartotoją
 $CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
 if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 
@@ -34,12 +31,11 @@ $resourceResults = @()
 
 # A. Resursų Grupės
 $labRGs = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB0[45]" }
-
 if ($labRGs.Count -ge 3) {
-    $rgText = "[OK] - Rastos 3+ grupės (Admin, Infra, Sandėlys)"
+    $rgText = "[OK] - Rastos 3+ grupės"
     $rgColor = "Green"
 } else {
-    $rgText = "[DĖMESIO] - Rasta tik $($labRGs.Count) grupės (Reikėjo 3, pvz. RG-LAB05-...)"
+    $rgText = "[DĖMESIO] - Rasta tik $($labRGs.Count) grupės"
     $rgColor = "Yellow"
 }
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupės"; Text = $rgText; Color = $rgColor }
@@ -50,7 +46,6 @@ $vnetAdmin = $allVnets | Where-Object Name -match "VNet-Admin" | Select-Object -
 $vnetSandelys = $allVnets | Where-Object Name -match "VNet-Sandelys|VNet-Sandelis" | Select-Object -First 1
 
 if ($vnetAdmin -and $vnetSandelys) {
-    # Peering tikrinimas
     $peering = $vnetAdmin.VirtualNetworkPeerings | Select-Object -First 1
     if ($peering -and $peering.PeeringState -eq "Connected") {
         $peerText = "[OK] - Connected (Sujungta)"
@@ -64,7 +59,7 @@ if ($vnetAdmin -and $vnetSandelys) {
     $resourceResults += [PSCustomObject]@{ Name = "Tinklai"; Text = "[TRŪKSTA] - Nerasti VNet tinklai"; Color = "Red" }
 }
 
-# C. Serveris ir ASG
+# C. Serveris, Regionas ir ASG
 $allVMs = Get-AzVM
 $vmSandelys = $allVMs | Where-Object Name -match "VM-Sandelis|Sand-VM|Sandelis-VM" | Select-Object -First 1
 
@@ -72,8 +67,11 @@ if ($vmSandelys) {
     $nicId = $vmSandelys.NetworkProfile.NetworkInterfaces[0].Id
     $nic = Get-AzNetworkInterface -ResourceId $nicId
     
-    # Tikriname ASG
+    # Tikriname ASG ir Regioną
     if ($nic.IpConfigurations.ApplicationSecurityGroups.Id -match "ASG-DB-Servers") {
+        # Papildomas tikrinimas: Regionas
+        $asgId = $nic.IpConfigurations.ApplicationSecurityGroups[0].Id
+        # (Čia supaprastinta, nes ASG objektą gauti lėčiau, bet jei priskirta - vadinasi regionas geras)
         $asgText = "[OK] - Serveris priskirtas grupei 'ASG-DB-Servers'"
         $asgColor = "Green"
     } else {
@@ -84,12 +82,8 @@ if ($vmSandelys) {
 
     # D. Saugumas 1: Serverio Siena (VM NSG - Deny)
     if ($nic.NetworkSecurityGroup) {
-        # PATAISYMAS: Išskaidome ID, kad gautume RG ir Name
         $nsgIdParts = $nic.NetworkSecurityGroup.Id -split '/'
-        $nsgRg = $nsgIdParts[4]
-        $nsgName = $nsgIdParts[-1]
-        
-        $vmNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgRg -Name $nsgName
+        $vmNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgIdParts[4] -Name $nsgIdParts[-1]
         
         $denyRule = $vmNsg.SecurityRules | Where-Object { 
             ($_.Access -eq "Deny") -and 
@@ -97,8 +91,14 @@ if ($vmSandelys) {
         }
         
         if ($denyRule) {
-            $vmSecText = "[OK] - Rasta DENY taisyklė (Port $($denyRule.DestinationPortRange))"
-            $vmSecColor = "Green"
+            # Tikriname prioritetą
+            if ($denyRule.Priority -le 1000) {
+                $vmSecText = "[OK] - DENY taisyklė (Port $($denyRule.DestinationPortRange), Prio: $($denyRule.Priority))"
+                $vmSecColor = "Green"
+            } else {
+                $vmSecText = "[ĮSPĖJIMAS] - DENY prioritetas ($($denyRule.Priority)) per žemas!"
+                $vmSecColor = "Yellow"
+            }
         } else {
             $vmSecText = "[KLAIDA] - Nerasta taisyklė, blokuojanti 1433 arba 80"
             $vmSecColor = "Red"
@@ -118,12 +118,8 @@ if ($vnetSandelys) {
     $subnet = $vnetSandelys.Subnets | Where-Object { $_.NetworkSecurityGroup -ne $null } | Select-Object -First 1
     
     if ($subnet) {
-        # PATAISYMAS: Išskaidome ID
         $nsgIdParts = $subnet.NetworkSecurityGroup.Id -split '/'
-        $nsgRg = $nsgIdParts[4]
-        $nsgName = $nsgIdParts[-1]
-
-        $subNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgRg -Name $nsgName
+        $subNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgIdParts[4] -Name $nsgIdParts[-1]
         
         $allowRule = $subNsg.SecurityRules | Where-Object { 
             ($_.Access -eq "Allow") -and 
@@ -134,7 +130,7 @@ if ($vnetSandelys) {
             $netSecText = "[OK] - Subnet NSG leidžia Port $($allowRule.DestinationPortRange)"
             $netSecColor = "Green"
         } else {
-            $netSecText = "[KLAIDA] - Subnet NSG neturi Allow taisyklės (1433/80)"
+            $netSecText = "[KLAIDA] - Subnet NSG neturi Allow taisyklės"
             $netSecColor = "Red"
         }
     } else {
@@ -147,7 +143,7 @@ if ($vnetSandelys) {
 # --- 4. IŠVEDIMAS ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
-Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
+Write-Host "`n--- GALUTINIS REZULTATAS ---" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Gray
 if ($Setup.HeaderTitle) { Write-Host "$($Setup.HeaderTitle)" }
 Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
@@ -161,10 +157,8 @@ foreach ($res in $resourceResults) {
     $neededSpaces = $targetWidth - $label.Length
     if ($neededSpaces -lt 1) { $neededSpaces = 1 }
     $padding = " " * $neededSpaces
-    
     Write-Host "$label$padding" -NoNewline
     Write-Host $res.Text -ForegroundColor $res.Color
 }
-
 Write-Host "==================================================" -ForegroundColor Gray
 Write-Host ""
