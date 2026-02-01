@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 4 TIKRINIMAS: Defense in Depth"
+$ScriptVersion = "LAB 04 TIKRINIMAS: Defense in Depth (v2)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -10,27 +10,31 @@ Write-Host "--------------------------------------------------"
 try {
     irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
 } catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų."
+    Write-Error "Nepavyko užkrauti bazinių funkcijų. Patikrinkite interneto ryšį."
     exit
 }
 
-# --- 2. INICIJUOJAME DARBĄ ---
-# Nurodome vietinį config failą (arba URL ateityje)
-$Setup = Initialize-Lab -LocalConfigUrl "Check-Lab4-config.json"
+# --- 2. INICIJUOJAME DARBĄ (Nuoroda į Config failą) ---
+# Nurodome tiesioginį URL į JSON failą GitHub'e
+$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json"
 $LocCfg = $Setup.LocalConfig
+
+# Nustatome vartotoją
 $CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
 if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 
 # --- 3. DUOMENŲ RINKIMAS ---
 $resourceResults = @()
 
-# A. Resursų Grupės (Tikriname ar yra 3)
+# A. Resursų Grupės (Turi būti 3)
+# Ieškome grupių su 'RG-LAB04' šaknimi
 $labRGs = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB04" }
+
 if ($labRGs.Count -ge 3) {
     $rgText = "[OK] - Rastos 3+ grupės (Infra, Admin, Sandėlys)"
     $rgColor = "Green"
 } else {
-    $rgText = "[DĖMESIO] - Rasta tik $($labRGs.Count) grupės (Reikėjo paskirstyti į 3)"
+    $rgText = "[DĖMESIO] - Rasta tik $($labRGs.Count) grupės (Instrukcijoje prašoma 3)"
     $rgColor = "Yellow"
 }
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupės"; Text = $rgText; Color = $rgColor }
@@ -38,10 +42,10 @@ $resourceResults += [PSCustomObject]@{ Name = "Resursų grupės"; Text = $rgText
 # B. Tinklai ir Peering
 $allVnets = Get-AzVirtualNetwork
 $vnetAdmin = $allVnets | Where-Object Name -match "VNet-Admin" | Select-Object -First 1
-$vnetSandelys = $allVnets | Where-Object Name -match "VNet-Sandelys" | Select-Object -First 1
+$vnetSandelys = $allVnets | Where-Object Name -match "VNet-Sandelys|VNet-Sandelis" | Select-Object -First 1
 
 if ($vnetAdmin -and $vnetSandelys) {
-    # Peering tikrinimas
+    # Peering tikrinimas (tikriname iš Admin pusės)
     $peering = $vnetAdmin.VirtualNetworkPeerings | Select-Object -First 1
     if ($peering -and $peering.PeeringState -eq "Connected") {
         $peerText = "[OK] - Connected (Sujungta)"
@@ -52,29 +56,30 @@ if ($vnetAdmin -and $vnetSandelys) {
     }
     $resourceResults += [PSCustomObject]@{ Name = "Tinklų sujungimas"; Text = $peerText; Color = $peerColor }
 } else {
-    $resourceResults += [PSCustomObject]@{ Name = "Tinklai"; Text = "[TRŪKSTA] - Nerasti VNet tinklai"; Color = "Red" }
+    $resourceResults += [PSCustomObject]@{ Name = "Tinklai"; Text = "[TRŪKSTA] - Nerasti abu VNet tinklai"; Color = "Red" }
 }
 
-# C. Serveriai ir ASG (Grupavimas)
+# C. Serveris ir ASG (Grupavimas)
 $allVMs = Get-AzVM
+# Ieškome pagal seną arba naują pavadinimą
 $vmSandelys = $allVMs | Where-Object Name -match "VM-Sandelis|Sand-VM" | Select-Object -First 1
 
 if ($vmSandelys) {
-    # Tikriname ar VM turi ASG
     $nicId = $vmSandelys.NetworkProfile.NetworkInterfaces[0].Id
     $nic = Get-AzNetworkInterface -ResourceId $nicId
     
+    # Tikriname ASG priskyrimą
     if ($nic.IpConfigurations.ApplicationSecurityGroups.Id -match "ASG-DB-Servers") {
-        $asgText = "[OK] - Priskirta grupė 'ASG-DB-Servers'"
+        $asgText = "[OK] - Serveris priskirtas grupei 'ASG-DB-Servers'"
         $asgColor = "Green"
     } else {
-        $asgText = "[TRŪKSTA] - VM neturi ASG grupės"
+        $asgText = "[TRŪKSTA] - VM neturi priskirtos ASG grupės"
         $asgColor = "Red"
     }
-    $resourceResults += [PSCustomObject]@{ Name = "Serverio grupavimas"; Text = $asgText; Color = $asgColor }
+    $resourceResults += [PSCustomObject]@{ Name = "Serverio grupavimas (ASG)"; Text = $asgText; Color = $asgColor }
 
     # D. Saugumas 1: Serverio Siena (VM NSG - Deny)
-    # Ieškome NSG, kuri priskirta tiesiai NIC plokštei
+    # Tikriname ar tiesiogiai ant NIC yra uždėta NSG su Deny taisykle
     if ($nic.NetworkSecurityGroup) {
         $vmNsg = Get-AzNetworkSecurityGroup -ResourceId $nic.NetworkSecurityGroup.Id
         $denyRule = $vmNsg.SecurityRules | Where-Object { ($_.Access -eq "Deny") -and ($_.DestinationPortRange -contains "1433") }
@@ -83,14 +88,14 @@ if ($vmSandelys) {
             $vmSecText = "[OK] - Rasta DENY taisyklė (Port 1433)"
             $vmSecColor = "Green"
         } else {
-            $vmSecText = "[KLAIDA] - Nerasta taisyklė, blokuojanti 1433"
+            $vmSecText = "[KLAIDA] - VM NSG neturi taisyklės, blokuojančios 1433"
             $vmSecColor = "Red"
         }
     } else {
-        $vmSecText = "[TRŪKSTA] - Serveris neturi asmeninės NSG"
+        $vmSecText = "[TRŪKSTA] - Serveriui nepriskirta asmeninė NSG"
         $vmSecColor = "Red"
     }
-    $resourceResults += [PSCustomObject]@{ Name = "Saugumas (VM lygyje)"; Text = $vmSecText; Color = $vmSecColor }
+    $resourceResults += [PSCustomObject]@{ Name = "Saugumas (VM Siena)"; Text = $vmSecText; Color = $vmSecColor }
 
 } else {
     $resourceResults += [PSCustomObject]@{ Name = "VM-Sandelis"; Text = "[TRŪKSTA] - Serveris nerastas"; Color = "Red" }
@@ -98,26 +103,26 @@ if ($vmSandelys) {
 
 # E. Saugumas 2: Tinklo Siena (Subnet NSG - Allow)
 if ($vnetSandelys) {
-    # Ieškome potinklio (dažniausiai 'default' arba 'VNet-Sandelis-Servers')
+    # Randame bet kurį potinklį, kuris turi NSG
     $subnet = $vnetSandelys.Subnets | Where-Object { $_.NetworkSecurityGroup -ne $null } | Select-Object -First 1
     
     if ($subnet) {
-        # Tikriname ar NSG turi Allow taisyklę
         $subNsg = Get-AzNetworkSecurityGroup -ResourceId $subnet.NetworkSecurityGroup.Id
+        # Ieškome Allow taisyklės 1433 portui
         $allowRule = $subNsg.SecurityRules | Where-Object { ($_.Access -eq "Allow") -and ($_.DestinationPortRange -contains "1433") }
         
         if ($allowRule) {
             $netSecText = "[OK] - Subnet NSG leidžia Port 1433"
             $netSecColor = "Green"
         } else {
-            $netSecText = "[KLAIDA] - Subnet NSG neturi Allow 1433 taisyklės"
+            $netSecText = "[KLAIDA] - Subnet NSG neturi 'Allow 1433' taisyklės"
             $netSecColor = "Red"
         }
     } else {
         $netSecText = "[TRŪKSTA] - Potinkliui nepriskirta jokia NSG"
         $netSecColor = "Red"
     }
-    $resourceResults += [PSCustomObject]@{ Name = "Saugumas (Tinklo lygyje)"; Text = $netSecText; Color = $netSecColor }
+    $resourceResults += [PSCustomObject]@{ Name = "Saugumas (Tinklo Siena)"; Text = $netSecText; Color = $netSecColor }
 }
 
 # --- 4. IŠVEDIMAS ---
@@ -133,7 +138,8 @@ Write-Host "==================================================" -ForegroundColor
 
 foreach ($res in $resourceResults) {
     $label = "$($res.Name):"
-    $targetWidth = 30
+    # Lygiavimas
+    $targetWidth = 35
     $neededSpaces = $targetWidth - $label.Length
     if ($neededSpaces -lt 1) { $neededSpaces = 1 }
     $padding = " " * $neededSpaces
