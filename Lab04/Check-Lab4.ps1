@@ -1,9 +1,9 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 4: Defense in Depth (Gold Edition)"
+$ScriptVersion = "LAB 04: Defense in Depth (Platinum - Full Topology)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
-Write-Host "Vykdoma išplėstinė patikra (Priority + Region check)..."
+Write-Host "Vykdoma pilna topologijos ir saugumo patikra..."
 Write-Host "--------------------------------------------------"
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
@@ -35,7 +35,7 @@ if ($labRGs.Count -ge 3) {
     $rgText = "[OK] - Rastos 3+ grupės"
     $rgColor = "Green"
 } else {
-    $rgText = "[DĖMESIO] - Rasta tik $($labRGs.Count) grupės"
+    $rgText = "[DĖMESIO] - Rasta tik $($labRGs.Count) grupės (Reikia 3)"
     $rgColor = "Yellow"
 }
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupės"; Text = $rgText; Color = $rgColor }
@@ -59,28 +59,49 @@ if ($vnetAdmin -and $vnetSandelys) {
     $resourceResults += [PSCustomObject]@{ Name = "Tinklai"; Text = "[TRŪKSTA] - Nerasti VNet tinklai"; Color = "Red" }
 }
 
-# C. Serveris, Regionas ir ASG
+# --- GAVIMAS VISŲ VM ---
 $allVMs = Get-AzVM
+
+# C. Admin Serveris (Klientas) - NAUJA DALIS
+$vmAdmin = $allVMs | Where-Object Name -match "VM-Admin|Admin-VM" | Select-Object -First 1
+
+if ($vmAdmin) {
+    # Tikriname, ar jis tikrai VNet-Admin tinkle
+    $nicId = $vmAdmin.NetworkProfile.NetworkInterfaces[0].Id
+    $nic = Get-AzNetworkInterface -ResourceId $nicId
+    $subnetId = $nic.IpConfigurations[0].Subnet.Id
+    
+    if ($subnetId -match "VNet-Admin") {
+        $adminText = "[OK] - Rastas ir prijungtas prie VNet-Admin"
+        $adminColor = "Green"
+    } else {
+        $adminText = "[DĖMESIO] - VM yra, bet ne 'VNet-Admin' tinkle"
+        $adminColor = "Yellow"
+    }
+} else {
+    $adminText = "[TRŪKSTA] - Nerastas serveris VM-Admin"
+    $adminColor = "Red"
+}
+$resourceResults += [PSCustomObject]@{ Name = "Admin Serveris"; Text = $adminText; Color = $adminColor }
+
+# D. Sandėlio Serveris (Taikinys)
 $vmSandelys = $allVMs | Where-Object Name -match "VM-Sandelis|Sand-VM|Sandelis-VM" | Select-Object -First 1
 
 if ($vmSandelys) {
     $nicId = $vmSandelys.NetworkProfile.NetworkInterfaces[0].Id
     $nic = Get-AzNetworkInterface -ResourceId $nicId
     
-    # Tikriname ASG ir Regioną
+    # 1. Tikriname ASG
     if ($nic.IpConfigurations.ApplicationSecurityGroups.Id -match "ASG-DB-Servers") {
-        # Papildomas tikrinimas: Regionas
-        $asgId = $nic.IpConfigurations.ApplicationSecurityGroups[0].Id
-        # (Čia supaprastinta, nes ASG objektą gauti lėčiau, bet jei priskirta - vadinasi regionas geras)
-        $asgText = "[OK] - Serveris priskirtas grupei 'ASG-DB-Servers'"
+        $asgText = "[OK] - Priskirta grupė 'ASG-DB-Servers'"
         $asgColor = "Green"
     } else {
-        $asgText = "[TRŪKSTA] - VM neturi priskirtos ASG grupės"
+        $asgText = "[TRŪKSTA] - VM neturi ASG grupės"
         $asgColor = "Red"
     }
-    $resourceResults += [PSCustomObject]@{ Name = "Serverio grupavimas (ASG)"; Text = $asgText; Color = $asgColor }
+    $resourceResults += [PSCustomObject]@{ Name = "Sandėlio VM (ASG)"; Text = $asgText; Color = $asgColor }
 
-    # D. Saugumas 1: Serverio Siena (VM NSG - Deny)
+    # 2. Tikriname VM NSG (Deny)
     if ($nic.NetworkSecurityGroup) {
         $nsgIdParts = $nic.NetworkSecurityGroup.Id -split '/'
         $vmNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgIdParts[4] -Name $nsgIdParts[-1]
@@ -91,29 +112,28 @@ if ($vmSandelys) {
         }
         
         if ($denyRule) {
-            # Tikriname prioritetą
             if ($denyRule.Priority -le 1000) {
                 $vmSecText = "[OK] - DENY taisyklė (Port $($denyRule.DestinationPortRange), Prio: $($denyRule.Priority))"
                 $vmSecColor = "Green"
             } else {
-                $vmSecText = "[ĮSPĖJIMAS] - DENY prioritetas ($($denyRule.Priority)) per žemas!"
+                $vmSecText = "[ĮSPĖJIMAS] - DENY prioritetas per žemas!"
                 $vmSecColor = "Yellow"
             }
         } else {
-            $vmSecText = "[KLAIDA] - Nerasta taisyklė, blokuojanti 1433 arba 80"
+            $vmSecText = "[KLAIDA] - Nerasta DENY taisyklė (1433/80)"
             $vmSecColor = "Red"
         }
     } else {
-        $vmSecText = "[TRŪKSTA] - Serveriui nepriskirta asmeninė NSG"
+        $vmSecText = "[TRŪKSTA] - Serveriui nepriskirta NSG"
         $vmSecColor = "Red"
     }
     $resourceResults += [PSCustomObject]@{ Name = "Saugumas (VM Siena)"; Text = $vmSecText; Color = $vmSecColor }
 
 } else {
-    $resourceResults += [PSCustomObject]@{ Name = "VM-Sandelis"; Text = "[TRŪKSTA] - Serveris nerastas"; Color = "Red" }
+    $resourceResults += [PSCustomObject]@{ Name = "Sandėlio VM"; Text = "[TRŪKSTA] - Serveris nerastas"; Color = "Red" }
 }
 
-# E. Saugumas 2: Tinklo Siena (Subnet NSG - Allow)
+# E. Saugumas: Tinklo Siena (Subnet NSG)
 if ($vnetSandelys) {
     $subnet = $vnetSandelys.Subnets | Where-Object { $_.NetworkSecurityGroup -ne $null } | Select-Object -First 1
     
