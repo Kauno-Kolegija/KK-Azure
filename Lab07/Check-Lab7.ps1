@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (v10 - Universal Scan)"
+$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (v10 - Universal Scan) "
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
