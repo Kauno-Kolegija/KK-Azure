@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (Final v3 - No Prompts)"
+$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (Final v4 - Fixed)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -53,16 +53,16 @@ if ($sqlServer) {
         $dbText = "[OK] - SQL DB rasta ($($db.DatabaseName))"
         $dbColor = "Green"
         
-        # 1. Geo-Replikacija (Su klaidų gaudymu, kad neklaustų input)
-        $replications = $null
-        try {
-            $replications = Get-AzSqlDatabaseReplicationLink -DatabaseName $db.DatabaseName -ServerName $sqlServer.ServerName -ResourceGroupName $sqlServer.ResourceGroupName -ErrorAction SilentlyContinue
-        } catch {}
+        # 1. Geo-Replikacija (NAUDOJAME Get-AzResource, KAD NEPRAŠYTŲ INPUT)
+        # Ieškome resursų, kurių tipas yra replicationLinks, priklausiančių šiam serveriui
+        $allLinks = Get-AzResource -ResourceGroupName $sqlServer.ResourceGroupName -ResourceType "Microsoft.Sql/servers/databases/replicationLinks" -ErrorAction SilentlyContinue
+        
+        # Filtruojame pagal mūsų DB pavadinimą (ParentResource turi formatą: serveris/database)
+        $dbLinks = $allLinks | Where-Object { $_.ParentResource -match "$($sqlServer.ServerName)/$($db.DatabaseName)" } | Select-Object -First 1
 
-        if ($replications) {
-            $partner = $replications.PartnerServer
-            if (-not $partner) { $partner = "Yra" }
-            $repText = "[OK] - Geo-Replikacija aktyvi (Partner: $partner)"
+        if ($dbLinks) {
+            # Partnerio serverio ID būna ilgas, pasiimame tik pavadinimą
+            $repText = "[OK] - Geo-Replikacija aktyvi (Link: $($dbLinks.Name))"
             $repColor = "Green"
         } else {
             $repText = "[TRŪKSTA] - Nerasta Geo-Replikacija (Replicas)"
@@ -103,22 +103,21 @@ if ($maskText -ne "-") { $resourceResults += [PSCustomObject]@{ Name = "Data Mas
 # C. Cosmos DB
 $cosmos = $null
 if ($rgName) {
-    # Ieškome tiksliai toje grupėje, kad išvengtume klausimų
     $cosmos = Get-AzCosmosDBAccount -ResourceGroupName $rgName -ErrorAction SilentlyContinue
 }
-
 if (-not $cosmos) {
-    # Atsarginis variantas: ieškoti visur
     $cosmos = Get-AzCosmosDBAccount | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
 }
 
 if ($cosmos) {
-    # 1. Consistency
-    if ($cosmos.DefaultConsistencyLevel -eq "Eventual") {
+    # 1. Consistency (Pataisyta vieta: savybė yra ConsistencyPolicy viduje)
+    $consLevel = $cosmos.ConsistencyPolicy.DefaultConsistencyLevel
+    
+    if ($consLevel -eq "Eventual") {
         $cosConText = "[OK] - Konsistencija: Eventual"
         $cosConColor = "Green"
     } else {
-        $cosConText = "[INFO] - Konsistencija: $($cosmos.DefaultConsistencyLevel) (Rekomenduota: Eventual)"
+        $cosConText = "[INFO] - Konsistencija: $consLevel (Rekomenduota: Eventual)"
         $cosConColor = "Yellow"
     }
     
