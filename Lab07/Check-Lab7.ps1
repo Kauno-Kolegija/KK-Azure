@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (Final v4 - Fixed)"
+$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (v5 - Bulletproof)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -30,7 +30,9 @@ if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 $resourceResults = @()
 
 # A. Resursų Grupė
+# Naudojame paprastą filtravimą - tai saugiausia
 $labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
+
 if ($labRG) {
     $rgName = $labRG.ResourceGroupName
     $rgText = "[OK] - Rasta grupė ($rgName)"
@@ -53,15 +55,14 @@ if ($sqlServer) {
         $dbText = "[OK] - SQL DB rasta ($($db.DatabaseName))"
         $dbColor = "Green"
         
-        # 1. Geo-Replikacija (NAUDOJAME Get-AzResource, KAD NEPRAŠYTŲ INPUT)
-        # Ieškome resursų, kurių tipas yra replicationLinks, priklausiančių šiam serveriui
+        # 1. Geo-Replikacija (NAUDOJAME Get-AzResource - tai niekada neprašo input)
+        # Ieškome resursų, kurių tipas yra replicationLinks
         $allLinks = Get-AzResource -ResourceGroupName $sqlServer.ResourceGroupName -ResourceType "Microsoft.Sql/servers/databases/replicationLinks" -ErrorAction SilentlyContinue
         
-        # Filtruojame pagal mūsų DB pavadinimą (ParentResource turi formatą: serveris/database)
+        # Filtruojame pagal mūsų DB pavadinimą
         $dbLinks = $allLinks | Where-Object { $_.ParentResource -match "$($sqlServer.ServerName)/$($db.DatabaseName)" } | Select-Object -First 1
 
         if ($dbLinks) {
-            # Partnerio serverio ID būna ilgas, pasiimame tik pavadinimą
             $repText = "[OK] - Geo-Replikacija aktyvi (Link: $($dbLinks.Name))"
             $repColor = "Green"
         } else {
@@ -101,16 +102,12 @@ if ($maskText -ne "-") { $resourceResults += [PSCustomObject]@{ Name = "Data Mas
 
 
 # C. Cosmos DB
-$cosmos = $null
-if ($rgName) {
-    $cosmos = Get-AzCosmosDBAccount -ResourceGroupName $rgName -ErrorAction SilentlyContinue
-}
-if (-not $cosmos) {
-    $cosmos = Get-AzCosmosDBAccount | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
-}
+# Grįžtame prie paprasto filtravimo be parametrų - tai lėčiau, bet 100% saugu nuo klausimų
+$cosmos = Get-AzCosmosDBAccount | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
 
 if ($cosmos) {
-    # 1. Consistency (Pataisyta vieta: savybė yra ConsistencyPolicy viduje)
+    # 1. Consistency
+    # Pataisyta: ConsistencyPolicy yra atskiras objektas
     $consLevel = $cosmos.ConsistencyPolicy.DefaultConsistencyLevel
     
     if ($consLevel -eq "Eventual") {
