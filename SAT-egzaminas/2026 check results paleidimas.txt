@@ -1,0 +1,9 @@
+subscription:   SAT-4-Kasparas-Janušaitis
+resource group: AzureWindowsEgzaminas
+vm name:        VM1-KasparasJanusaitis
+
+cd "C:\#Repo\KK-Azure\SAT-egzaminas"
+
+.\#2026_check_results2.ps1 -SubscriptionName "SAT-4-Kasparas-Janušaitis" -ResourceGroup "AzureWindowsEgzaminas" -VMName "VM1-KasparasJanusaitis"
+
+
