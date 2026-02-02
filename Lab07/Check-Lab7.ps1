@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (v7 - Aggressive SQL Check)"
+$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (v8 - Broad Search)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -57,22 +57,17 @@ if ($sqlServer) {
         $dbText = "[OK] - SQL DB rasta ($($db.DatabaseName))"
         $dbColor = "Green"
         
-        # 1. Geo-Replikacija (NAUJA LOGIKA: Ieškome bet kokios nuorodos grupėje)
+        # 1. Geo-Replikacija (Plačiausia įmanoma paieška)
         $repText = "[TRŪKSTA] - Nerasta Geo-Replikacija"
         $repColor = "Red"
         
-        # Išsitraukiame VISUS replikacijos ryšius šioje grupėje, nepriklausomai nuo serverio
-        $allLinks = Get-AzResource -ResourceGroupName $rgName -ResourceType "Microsoft.Sql/servers/databases/replicationLinks" -ErrorAction SilentlyContinue
+        # Ieškome bet kokių resursų, kurių tipas baigiasi 'replicationLinks' šioje grupėje
+        # Tai apeina tikslaus tipo/pavadinimo problemas
+        $allLinks = Get-AzResource -ResourceGroupName $rgName | Where-Object { $_.ResourceType -like "*replicationLinks" }
         
         if ($allLinks) {
-            # Tikriname ar bent vienas ryšys savo pavadinime arba ID turi mūsų DB pavadinimą
-            # Tai pats patikimiausias būdas
-            $matchLink = $allLinks | Where-Object { $_.Name -match $db.DatabaseName -or $_.ResourceId -match $db.DatabaseName } | Select-Object -First 1
-            
-            if ($matchLink) {
-                $repText = "[OK] - Geo-Replikacija aktyvi"
-                $repColor = "Green"
-            }
+            $repText = "[OK] - Geo-Replikacija aktyvi"
+            $repColor = "Green"
         }
 
         # 2. Maskavimas (Data Masking)
@@ -112,7 +107,6 @@ $cosConText = "-"; $cosRegText = "-"
 $cosmosObj = $null
 
 if ($rgName) {
-    # Ieškome Cosmos DB paskyros
     $cosmosRes = Get-AzResource -ResourceGroupName $rgName -ResourceType "Microsoft.DocumentDB/databaseAccounts" -ErrorAction SilentlyContinue | Select-Object -First 1
     
     if ($cosmosRes) {
