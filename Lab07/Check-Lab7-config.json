@@ -1,0 +1,8 @@
+{
+  "LabName": "LAB 7: Azure Duomenų bazės (SQL & NoSQL)",
+  "ResourceGroupPattern": "RG-LAB07",
+  "RequiredResources": [
+    { "Type": "Microsoft.Sql/servers", "Name": "sql" },
+    { "Type": "Microsoft.DocumentDB/databaseAccounts", "Name": "cosmos" }
+  ]
+}
