@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (Final v2)"
+$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (Final v3 - No Prompts)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -32,9 +32,11 @@ $resourceResults = @()
 # A. Resursų Grupė
 $labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
 if ($labRG) {
-    $rgText = "[OK] - Rasta grupė ($($labRG.ResourceGroupName))"
+    $rgName = $labRG.ResourceGroupName
+    $rgText = "[OK] - Rasta grupė ($rgName)"
     $rgColor = "Green"
 } else {
+    $rgName = $null
     $rgText = "[KLAIDA] - Nerasta grupė RG-LAB07..."
     $rgColor = "Red"
 }
@@ -42,45 +44,44 @@ $resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText;
 
 # B. SQL Serveris ir DB
 $sqlServer = Get-AzSqlServer | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
+
 if ($sqlServer) {
-    # Randame vartotojo kurtą DB (ignoruojame master)
+    # Randame vartotojo kurtą DB
     $db = Get-AzSqlDatabase -ServerName $sqlServer.ServerName -ResourceGroupName $sqlServer.ResourceGroupName | Where-Object { $_.DatabaseName -ne "master" } | Select-Object -First 1
     
     if ($db) {
         $dbText = "[OK] - SQL DB rasta ($($db.DatabaseName))"
         $dbColor = "Green"
         
-        # 1. Geo-Replikacija
-        # Tikriname Replication Links
+        # 1. Geo-Replikacija (Su klaidų gaudymu, kad neklaustų input)
+        $replications = $null
         try {
             $replications = Get-AzSqlDatabaseReplicationLink -DatabaseName $db.DatabaseName -ServerName $sqlServer.ServerName -ResourceGroupName $sqlServer.ResourceGroupName -ErrorAction SilentlyContinue
-            if ($replications) {
-                $partner = $replications.PartnerServer
-                $repText = "[OK] - Geo-Replikacija aktyvi (Partner: $partner)"
-                $repColor = "Green"
-            } else {
-                $repText = "[TRŪKSTA] - Nerasta Geo-Replikacija (Replicas)"
-                $repColor = "Red"
-            }
-        } catch {
-            $repText = "[KLAIDA] - Nepavyko patikrinti replikacijos"
+        } catch {}
+
+        if ($replications) {
+            $partner = $replications.PartnerServer
+            if (-not $partner) { $partner = "Yra" }
+            $repText = "[OK] - Geo-Replikacija aktyvi (Partner: $partner)"
+            $repColor = "Green"
+        } else {
+            $repText = "[TRŪKSTA] - Nerasta Geo-Replikacija (Replicas)"
             $repColor = "Red"
         }
 
         # 2. Maskavimas (Data Masking)
+        $masking = $null
         try {
             $masking = Get-AzSqlDatabaseDataMaskingRule -ServerName $sqlServer.ServerName -ResourceGroupName $sqlServer.ResourceGroupName -DatabaseName $db.DatabaseName -ErrorAction SilentlyContinue
-            if ($masking) {
-                $maskCount = $masking.Count
-                $maskText = "[OK] - Rasta maskavimo taisyklių: $maskCount"
-                $maskColor = "Green"
-            } else {
-                $maskText = "[TRŪKSTA] - Nerastos Data Masking taisyklės"
-                $maskColor = "Red"
-            }
-        } catch {
-             $maskText = "[Info] - Maskavimo taisyklių nerasta"
-             $maskColor = "Yellow"
+        } catch {}
+
+        if ($masking) {
+            $maskCount = $masking.Count
+            $maskText = "[OK] - Rasta maskavimo taisyklių: $maskCount"
+            $maskColor = "Green"
+        } else {
+            $maskText = "[TRŪKSTA] - Nerastos Data Masking taisyklės"
+            $maskColor = "Red"
         }
 
     } else {
@@ -91,16 +92,28 @@ if ($sqlServer) {
 } else {
     $dbText = "[TRŪKSTA] - Nerastas SQL Serveris"
     $dbColor = "Red"
+    $repText = "-"; $maskText = "-"
 }
+
 $resourceResults += [PSCustomObject]@{ Name = "SQL Duomenų bazė"; Text = $dbText; Color = $dbColor }
-if ($repText) { $resourceResults += [PSCustomObject]@{ Name = "Geo-Replikacija"; Text = $repText; Color = $repColor } }
-if ($maskText) { $resourceResults += [PSCustomObject]@{ Name = "Data Masking"; Text = $maskText; Color = $maskColor } }
+if ($repText -ne "-") { $resourceResults += [PSCustomObject]@{ Name = "Geo-Replikacija"; Text = $repText; Color = $repColor } }
+if ($maskText -ne "-") { $resourceResults += [PSCustomObject]@{ Name = "Data Masking"; Text = $maskText; Color = $maskColor } }
 
 
 # C. Cosmos DB
-$cosmos = Get-AzCosmosDBAccount | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
+$cosmos = $null
+if ($rgName) {
+    # Ieškome tiksliai toje grupėje, kad išvengtume klausimų
+    $cosmos = Get-AzCosmosDBAccount -ResourceGroupName $rgName -ErrorAction SilentlyContinue
+}
+
+if (-not $cosmos) {
+    # Atsarginis variantas: ieškoti visur
+    $cosmos = Get-AzCosmosDBAccount | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
+}
+
 if ($cosmos) {
-    # 1. Consistency (Eventual)
+    # 1. Consistency
     if ($cosmos.DefaultConsistencyLevel -eq "Eventual") {
         $cosConText = "[OK] - Konsistencija: Eventual"
         $cosConColor = "Green"
@@ -109,7 +122,7 @@ if ($cosmos) {
         $cosConColor = "Yellow"
     }
     
-    # 2. Global Distribution (Regionų skaičius)
+    # 2. Global Distribution
     $locCount = $cosmos.Locations.Count
     if ($locCount -ge 2) {
         $cosRegText = "[OK] - Globali replikacija aktyvi (Regionų: $locCount)"
