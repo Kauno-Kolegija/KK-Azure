@@ -1,9 +1,9 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 6 TIKRINIMAS: Storage & Security (Firewall-Aware)"
+$ScriptVersion = "LAB 6 TIKRINIMAS: Storage, Security & Content (Diamond v2)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
-Write-Host "Vykdoma patikra (Ignoruojant Data Plane blokavimą)..."
+Write-Host "Vykdoma pilna patikra (Infrastruktūra + Turinys)..."
 Write-Host "--------------------------------------------------"
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
@@ -29,7 +29,7 @@ if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 # --- 3. DUOMENŲ RINKIMAS ---
 $resourceResults = @()
 
-# A. Resursų Grupės (Gali būti 1 arba 2 dėl Move operacijos)
+# A. Resursų Grupės
 $labRGs = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB06" }
 if ($labRGs.Count -ge 1) {
     $rgText = "[OK] - Rasta resursų grupė(ės)"
@@ -40,12 +40,11 @@ if ($labRGs.Count -ge 1) {
 }
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupės"; Text = $rgText; Color = $rgColor }
 
-# B. Storage Account (Pagrindinis resursas)
-# Ieškome bet kurios saugyklos, kurios pavadinime yra "store" ir ji yra LAB06 grupėse
+# B. Storage Account
 $storage = Get-AzStorageAccount | Where-Object { ($_.ResourceGroupName -match "RG-LAB06") -and ($_.StorageAccountName -match "store") } | Select-Object -First 1
 
 if ($storage) {
-    # 1. Access Tier (Cool)
+    # 1. Access Tier
     if ($storage.AccessTier -eq "Cool") {
         $tierText = "[OK] - Nustatyta 'Cool' pakopa"
         $tierColor = "Green"
@@ -55,7 +54,7 @@ if ($storage) {
     }
     $resourceResults += [PSCustomObject]@{ Name = "Storage Tier"; Text = $tierText; Color = $tierColor }
 
-    # 2. Static Website (Tikriname per PrimaryEndpoints)
+    # 2. Static Website
     if ($storage.PrimaryEndpoints.Web) {
         $webText = "[OK] - Static Website įjungtas"
         $webColor = "Green"
@@ -65,13 +64,37 @@ if ($storage) {
     }
     $resourceResults += [PSCustomObject]@{ Name = "Statinė svetainė"; Text = $webText; Color = $webColor }
 
-    # 3. SAUGUMAS (Firewall) - Tikriname Control Plane
-    # DefaultAction 'Deny' reiškia, kad vieša prieiga užblokuota (Selected networks)
+    # 3. File Share (NAUJA: Tikriname ar sukurtas diskas)
+    # Naudojame RM komandą, kad apeitume ugniasienę
+    $share = Get-AzRmStorageShare -ResourceGroupName $storage.ResourceGroupName -StorageAccountName $storage.StorageAccountName -Name "imones-duomenys" -ErrorAction SilentlyContinue
+    
+    if ($share) {
+        $shareText = "[OK] - Rastas tinklo diskas 'imones-duomenys'"
+        $shareColor = "Green"
+    } else {
+        $shareText = "[TRŪKSTA] - Nesukurtas File Share 'imones-duomenys'"
+        $shareColor = "Red"
+    }
+    $resourceResults += [PSCustomObject]@{ Name = "Azure Files (Z:)"; Text = $shareText; Color = $shareColor }
+
+    # 4. Blob Containers (NAUJA: Tikriname papildomus konteinerius)
+    $contArch = Get-AzRmStorageContainer -ResourceGroupName $storage.ResourceGroupName -StorageAccountName $storage.StorageAccountName -Name "archyvas" -ErrorAction SilentlyContinue
+    $contPriv = Get-AzRmStorageContainer -ResourceGroupName $storage.ResourceGroupName -StorageAccountName $storage.StorageAccountName -Name "privatus" -ErrorAction SilentlyContinue
+
+    if ($contArch -or $contPriv) {
+        $blobText = "[OK] - Rasti papildomi konteineriai (Archyvas/Privatus)"
+        $blobColor = "Green"
+    } else {
+        $blobText = "[TRŪKSTA] - Nerasti konteineriai 'archyvas' arba 'privatus'"
+        $blobColor = "Red"
+    }
+    $resourceResults += [PSCustomObject]@{ Name = "Blob Konteineriai"; Text = $blobText; Color = $blobColor }
+
+    # 5. SAUGUMAS (Firewall)
     if ($storage.NetworkRuleSet.DefaultAction -eq "Deny") {
         $fwText = "[OK] - Vieša prieiga blokuojama (Firewall Active)"
         $fwColor = "Green"
         
-        # Tikriname ar pridėtas VNet
         if ($storage.NetworkRuleSet.VirtualNetworkRules.Count -gt 0) {
             $vnetText = "[OK] - Pridėta VNet taisyklė ($($storage.NetworkRuleSet.VirtualNetworkRules.Count))"
             $vnetColor = "Green"
@@ -94,7 +117,7 @@ if ($storage) {
     $resourceResults += [PSCustomObject]@{ Name = "Storage Account"; Text = "[TRŪKSTA] - Nerasta saugykla (*store*)"; Color = "Red" }
 }
 
-# C. Virtuali Mašina (Per ARM Template)
+# C. Virtuali Mašina
 $vm = Get-AzVM | Where-Object { ($_.ResourceGroupName -match "RG-LAB06") -and ($_.Name -eq "VM-Storage") } | Select-Object -First 1
 
 if ($vm) {
@@ -105,7 +128,6 @@ if ($vm) {
     $vmColor = "Red"
 }
 $resourceResults += [PSCustomObject]@{ Name = "Serveris (IaC)"; Text = $vmText; Color = $vmColor }
-
 
 # --- 4. IŠVEDIMAS ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"

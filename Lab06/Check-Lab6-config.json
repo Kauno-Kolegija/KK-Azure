@@ -1,5 +1,5 @@
 {
-  "LabName": "LAB 6: Azure Storage & Security",
+  "LabName": "LAB 6: Saugyklos paslaugos",
   "ResourceGroupPattern": "RG-LAB06",
   "RequiredResources": [
     { "Type": "Microsoft.Storage/storageAccounts", "Name": "store" },
