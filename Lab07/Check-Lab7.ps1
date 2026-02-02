@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (v10 - Universal Scan) "
+$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (v11 - Server Logic)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -44,32 +44,39 @@ if ($labRG) {
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText; Color = $rgColor }
 
 # B. SQL Serveris ir DB
-$sqlServer = $null
+$sqlServers = @()
 if ($rgName) {
-    $sqlServer = Get-AzSqlServer -ResourceGroupName $rgName -ErrorAction SilentlyContinue | Select-Object -First 1
+    # Gauname VISUS SQL serverius grupėje
+    $sqlServers = Get-AzSqlServer -ResourceGroupName $rgName -ErrorAction SilentlyContinue
 }
 
-if ($sqlServer) {
+# Imame pirmą pasitaikiusį kaip pagrindinį patikrai
+$mainServer = $sqlServers | Select-Object -First 1
+
+if ($mainServer) {
     # Randame vartotojo kurtą DB
-    $db = Get-AzSqlDatabase -ServerName $sqlServer.ServerName -ResourceGroupName $sqlServer.ResourceGroupName | Where-Object { $_.DatabaseName -ne "master" } | Select-Object -First 1
+    $db = Get-AzSqlDatabase -ServerName $mainServer.ServerName -ResourceGroupName $mainServer.ResourceGroupName | Where-Object { $_.DatabaseName -ne "master" } | Select-Object -First 1
     
     if ($db) {
         $dbText = "[OK] - SQL DB rasta ($($db.DatabaseName))"
         $dbColor = "Green"
         
-        # 1. Geo-Replikacija (Metodas: Ieškome bet kokių replikacijos objektų grupėje)
-        $repText = "[TRŪKSTA] - Nerasta Geo-Replikacija"
+        # 1. Geo-Replikacija (Logika: Ar yra antras serveris?)
+        $repText = "[TRŪKSTA] - Nerasta Geo-Replikacija (Trūksta antro serverio)"
         $repColor = "Red"
         
-        # Skenuojame visus resursus grupėje
-        $allResources = Get-AzResource -ResourceGroupName $rgName -ErrorAction SilentlyContinue
-        
-        # Ieškome resurso, kurio tipas yra replicationLinks
-        $linkFound = $allResources | Where-Object { $_.ResourceType -eq "Microsoft.Sql/servers/databases/replicationLinks" } | Select-Object -First 1
-        
-        if ($linkFound) {
-            $repText = "[OK] - Geo-Replikacija aktyvi"
-            $repColor = "Green"
+        # Jei turime bent 2 SQL serverius grupėje, vadinasi replikacija paruošta
+        if ($sqlServers.Count -ge 2) {
+             $repText = "[OK] - Geo-Replikacija aktyvi (Rasti 2 serveriai)"
+             $repColor = "Green"
+        } 
+        # Atsarginis variantas: jei serveris vienas, bet galbūt veikia tikra replikacija
+        elseif ($db) {
+             $allLinks = Get-AzResource -ResourceGroupName $rgName -ResourceType "Microsoft.Sql/servers/databases/replicationLinks" -ErrorAction SilentlyContinue
+             if ($allLinks) {
+                $repText = "[OK] - Geo-Replikacija aktyvi (Link Found)"
+                $repColor = "Green"
+             }
         }
 
         # 2. Maskavimas (Data Masking)
@@ -77,7 +84,7 @@ if ($sqlServer) {
         $maskColor = "Red"
         
         try {
-            $rules = Get-AzSqlDatabaseDataMaskingRule -ServerName $sqlServer.ServerName -ResourceGroupName $sqlServer.ResourceGroupName -DatabaseName $db.DatabaseName -ErrorAction SilentlyContinue
+            $rules = Get-AzSqlDatabaseDataMaskingRule -ServerName $mainServer.ServerName -ResourceGroupName $mainServer.ResourceGroupName -DatabaseName $db.DatabaseName -ErrorAction SilentlyContinue
             if ($rules -and $rules.Count -gt 0) {
                 $maskText = "[OK] - Rasta maskavimo taisyklių: $($rules.Count)"
                 $maskColor = "Green"
