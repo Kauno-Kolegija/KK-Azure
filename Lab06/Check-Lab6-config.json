@@ -1,0 +1,8 @@
+{
+  "LabName": "LAB 6: Azure Storage & Security",
+  "ResourceGroupPattern": "RG-LAB06",
+  "RequiredResources": [
+    { "Type": "Microsoft.Storage/storageAccounts", "Name": "store" },
+    { "Type": "Microsoft.Compute/virtualMachines", "Name": "VM-Storage" }
+  ]
+}
