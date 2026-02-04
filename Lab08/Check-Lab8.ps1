@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 8 TIKRINIMAS: Web Apps, Slots & Monitoring"
+$ScriptVersion = "LAB 8 TIKRINIMAS: Web Apps & Monitoring (Final)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -7,12 +7,10 @@ Write-Host "Vykdoma konfigūracijos patikra..."
 Write-Host "--------------------------------------------------"
 
 # --- 1. PASIRUOŠIMAS ---
-# Bandome gauti resursų grupę pagal šabloną
-$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB08" } | Select-Object -First 1
-
 $resourceResults = @()
 
-# --- 2. TIKRINIMAS ---
+# Bandome gauti resursų grupę
+$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB08" } | Select-Object -First 1
 
 # A. Resursų Grupė
 if ($labRG) {
@@ -26,10 +24,11 @@ $resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText;
 
 if ($labRG) {
     # B. App Service Plan (Planas ir Scale Out)
+    # Priverstinai atnaujiname plano informaciją, kad matytume naujausią serverių skaičių
     $appPlan = Get-AzAppServicePlan | Where-Object { $_.ResourceGroup -eq $labRG.ResourceGroupName } | Select-Object -First 1
     
     if ($appPlan) {
-        # Tikriname ar planas yra mokamas (Premium/Standard)
+        # Tikriname ar planas yra mokamas
         $tier = $appPlan.Sku.Tier
         if ($tier -ne "Free" -and $tier -ne "Shared") {
             $planStatus = "[OK] - Planas tinkamas ($tier - $($appPlan.Sku.Name))"
@@ -40,11 +39,13 @@ if ($labRG) {
         }
 
         # Tikriname Scale Out (Serverių skaičių)
-        if ($appPlan.Capacity -ge 2) {
-            $scaleStatus = "[OK] - Scale Out aktyvus (Serverių: $($appPlan.Capacity))"
+        # Naudojame Sku.Capacity, nes tai tiksliausias rodiklis
+        $serverCount = $appPlan.Sku.Capacity
+        if ($serverCount -ge 2) {
+            $scaleStatus = "[OK] - Scale Out aktyvus (Serverių: $serverCount)"
             $scaleColor = "Green"
         } else {
-            $scaleStatus = "[TRŪKSTA] - Naudojamas tik 1 serveris. Padidinkite iki 2."
+            $scaleStatus = "[TRŪKSTA] - Naudojamas tik $serverCount serveris. Padidinkite iki 2."
             $scaleColor = "Red"
         }
 
@@ -86,8 +87,7 @@ if ($labRG) {
     $resourceResults += [PSCustomObject]@{ Name = "Web Aplikacija"; Text = $webText; Color = $webColor }
     $resourceResults += [PSCustomObject]@{ Name = "Deployment Slots"; Text = $slotText; Color = $slotColor }
 
-    # D. Monitoringas ir Alerts (Nauja dalis)
-    # Tikriname ar yra sukurta bent viena Alert taisyklė
+    # D. Monitoringas ir Alerts
     $alerts = Get-AzMetricAlertRuleV2 -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue
     
     if ($alerts -and $alerts.Count -ge 1) {
@@ -98,25 +98,6 @@ if ($labRG) {
         $alertColor = "Red"
     }
     $resourceResults += [PSCustomObject]@{ Name = "Alerts (Įspėjimai)"; Text = $alertText; Color = $alertColor }
-    
-    # E. Biudžetas (Budgets)
-    # Biudžetai dažnai būna prenumeratos lygyje, bet filtruojami pagal RG.
-    # Tai sudėtingesnis tikrinimas, todėl naudosime "try-catch"
-    try {
-        $budgets = Get-AzConsumptionBudget -ResourceGroupName $labRG.ResourceGroupName -ErrorAction Stop
-        if ($budgets) {
-            $budgetText = "[OK] - Biudžetas sukurtas ($($budgets.Name): $($budgets.Amount) EUR)"
-            $budgetColor = "Green"
-        } else {
-            $budgetText = "[INFO] - Biudžetas nerastas (gali reikėti patikrinti rankiniu būdu)"
-            $budgetColor = "Yellow"
-        }
-    } catch {
-        $budgetText = "[INFO] - Nepavyko patikrinti biudžeto (teisių apribojimas)"
-        $budgetColor = "Yellow"
-    }
-    $resourceResults += [PSCustomObject]@{ Name = "Biudžetas"; Text = $budgetText; Color = $budgetColor }
-
 }
 
 # --- 3. REZULTATŲ IŠVEDIMAS ---
