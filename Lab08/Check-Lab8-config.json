@@ -1,0 +1,18 @@
+{
+  "LabName": "LAB 08: Azure Web Apps stebėjimas ir įspėjimai",
+  "ResourceGroupPattern": "RG-LAB08",
+  "RequiredResources": [
+    {
+      "Type": "Microsoft.Web/serverfarms",
+      "Name": "App Service Plan"
+    },
+    {
+      "Type": "Microsoft.Web/sites",
+      "Name": "Web App"
+    },
+    {
+      "Type": "Microsoft.Insights/metricAlerts",
+      "Name": "Alert Rule (Monitoring)"
+    }
+  ]
+}
