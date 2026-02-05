@@ -93,7 +93,7 @@ if ($aci) {
          Write-Host "[KLAIDA] Statusas: $($aci.ProvisioningState)" -ForegroundColor Red
     }
 } else {
-    Write-Host "[KLAIDA] Nerastas ACI konteineris." -ForegroundColor Red
+    Write-Host "[KLAIDA] Nerastas ACI konteineris. " -ForegroundColor Red
 }
 
 Write-Host "`n--- TIKRINIMAS BAIGTAS ---" -ForegroundColor Cyan
