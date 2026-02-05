@@ -18,7 +18,7 @@ if (-not $labRG) {
 Write-Host "[OK] Rasta grupė: $($labRG.ResourceGroupName)" -ForegroundColor Green
 
 # --- 2. AZURE CONTAINER REGISTRY (ACR) ---
-Write-Host "`n--- 1. Container Registry (ACR) ---" -ForegroundColor Cyan
+Write-Host "--- 1. Container Registry (ACR) ---" -ForegroundColor Cyan
 $acr = Get-AzContainerRegistry -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
 
 if ($acr) {
@@ -46,7 +46,7 @@ if ($acr) {
 }
 
 # --- 3. VIRTUALI MAŠINA (VM) ---
-Write-Host "`n--- 2. Linux VM ir Portai ---" -ForegroundColor Cyan
+Write-Host "--- 2. Linux VM ir Portai ---" -ForegroundColor Cyan
 $vm = Get-AzVM -ResourceGroupName $labRG.ResourceGroupName -Name "DockerVM" -ErrorAction SilentlyContinue
 
 if ($vm) {
@@ -66,7 +66,7 @@ if ($vm) {
 }
 
 # --- 4. ACI (Svetainė) ---
-Write-Host "`n--- 3. Container Instance (Svetainė) ---" -ForegroundColor Cyan
+Write-Host "--- 3. Container Instance (Svetainė) ---" -ForegroundColor Cyan
 $aci = Get-AzContainerGroup -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
 
 if ($aci) {
