@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
-    LAB 09/10 Patikrinimo Scriptas (v5.0 - Full Repository Check)
+    LAB 09/10 Patikrinimo Scriptas (v5.1 - Clean Lines)
 .DESCRIPTION
-    Tikrina: ACR (išvardina repos), VM, Portus ir ACI (išvardina konteinerius).
+    Tikrina: ACR, VM, Portus, ACI.
+    Priverstinai atskiria eilutes sąrašuose.
 #>
 
-$ScriptVersion = "LAB 09/10 Check: Repositories & Containers"
+$ScriptVersion = "LAB 09/10 Check: Final Version"
 Clear-Host
 Write-Host "--- $ScriptVersion ---" -ForegroundColor Cyan
 
@@ -23,16 +24,15 @@ $acr = Get-AzContainerRegistry -ResourceGroupName $labRG.ResourceGroupName -Erro
 
 if ($acr) {
     Write-Host "[OK] Registras rastas: $($acr.Name)" -ForegroundColor Green
-    Write-Host "     Login Server: $($acr.LoginServer)" -ForegroundColor Gray
     
     try {
-        # Gauname repozitorijų sąrašą
-        $repos = az acr repository list --name $acr.Name --output tsv 2>$null
+        # Svarbu: Priverstinai skaidome rezultatą į naujas eilutes (-split)
+        $reposRaw = az acr repository list --name $acr.Name --output tsv 2>$null
+        $repos = $reposRaw -split "\s+" | Where-Object { $_ -ne "" }
         
         if ($repos) {
              Write-Host "`n     --- Rastos repozitorijos (Images): ---" -ForegroundColor Gray
              foreach ($repo in $repos) {
-                 # Pažymime vartotojo sukurtus vaizdus žaliai
                  if ($repo -notmatch "hello-world" -and $repo -notmatch "aci-helloworld") {
                      Write-Host "     [+] $repo (Jūsų sukurtas)" -ForegroundColor Green
                  } else {
@@ -40,9 +40,9 @@ if ($acr) {
                  }
              }
         } else {
-             Write-Host "     [INFO] Repozitorijų nerasta (Registras tuščias)." -ForegroundColor Yellow
+             Write-Host "     [INFO] Registras tuščias." -ForegroundColor Yellow
         }
-    } catch { Write-Host "[INFO] Nepavyko nuskaityti vaizdų sąrašo." -ForegroundColor Gray }
+    } catch { Write-Host "[INFO] Nepavyko nuskaityti sąrašo." -ForegroundColor Gray }
 } else {
     Write-Host "[KLAIDA] Nerastas ACR" -ForegroundColor Red
 }
@@ -67,7 +67,7 @@ if ($vm) {
     Write-Host "[TRŪKSTA] Nerasta VM 'DockerVM'." -ForegroundColor Red
 }
 
-# --- 4. ACI (Svetainė) - HYBRID CHECK ---
+# --- 4. ACI (Svetainė) ---
 Write-Host "`n--- 3. Container Instance (Svetainė) ---" -ForegroundColor Cyan
 $aci = Get-AzContainerGroup -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
 
@@ -80,10 +80,8 @@ if ($aci) {
          
          Write-Host "`n     --- Veikiantys konteineriai: ---" -ForegroundColor Gray
          
-         # 1. Bandome per PowerShell
+         # Hybrid Check: PS + CLI Backup
          $containersList = $aci.Containers
-         
-         # 2. Bandome per CLI (Backup)
          if (-not $containersList) {
              try {
                  $jsonInfo = az container show --resource-group $labRG.ResourceGroupName --name $aci.Name --output json | ConvertFrom-Json
@@ -91,7 +89,6 @@ if ($aci) {
              } catch {}
          }
 
-         # Spausdiname sąrašą
          if ($containersList) {
              foreach ($container in $containersList) {
                  $imgName = if ($container.image) { $container.image } else { $container.Image }
@@ -104,7 +101,7 @@ if ($aci) {
                  }
              }
          } else {
-             Write-Host "     [KLAIDA] Nepavyko nuskaityti konteinerių sąrašo." -ForegroundColor Red
+             Write-Host "     [KLAIDA] Nepavyko nuskaityti sąrašo." -ForegroundColor Red
          }
 
     } else {
