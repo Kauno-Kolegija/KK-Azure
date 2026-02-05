@@ -1,9 +1,8 @@
 <#
 .SYNOPSIS
-    LAB 09/10 Patikrinimo Scriptas (v5.1 - Clean Lines)
+    LAB 09/10 Patikrinimo Scriptas (v6.0 - Compact)
 .DESCRIPTION
-    Tikrina: ACR, VM, Portus, ACI.
-    Priverstinai atskiria eilutes sąrašuose.
+    Tikrina: ACR (sutrumpintai), VM, Portus, ACI (tik statusą ir URL).
 #>
 
 $ScriptVersion = "LAB 09/10 Check: Final Version"
@@ -26,23 +25,22 @@ if ($acr) {
     Write-Host "[OK] Registras rastas: $($acr.Name)" -ForegroundColor Green
     
     try {
-        # Svarbu: Priverstinai skaidome rezultatą į naujas eilutes (-split)
+        # Gauname repozitorijas ir iškart spausdiname po registru
         $reposRaw = az acr repository list --name $acr.Name --output tsv 2>$null
         $repos = $reposRaw -split "\s+" | Where-Object { $_ -ne "" }
         
         if ($repos) {
-             Write-Host "`n     --- Rastos repozitorijos (Images): ---" -ForegroundColor Gray
              foreach ($repo in $repos) {
-                 if ($repo -notmatch "hello-world" -and $repo -notmatch "aci-helloworld") {
-                     Write-Host "     [+] $repo (Jūsų sukurtas)" -ForegroundColor Green
+                 if ($repo -match "hello-world" -or $repo -match "aci-helloworld") {
+                     Write-Host "     [+] $repo (Microsoft/Demo)" -ForegroundColor Yellow
                  } else {
-                     Write-Host "     [i] $repo (Microsoft/Demo)" -ForegroundColor Yellow
+                     Write-Host "     [+] $repo (Jūsų sukurtas)" -ForegroundColor Green
                  }
              }
         } else {
              Write-Host "     [INFO] Registras tuščias." -ForegroundColor Yellow
         }
-    } catch { Write-Host "[INFO] Nepavyko nuskaityti sąrašo." -ForegroundColor Gray }
+    } catch { }
 } else {
     Write-Host "[KLAIDA] Nerastas ACR" -ForegroundColor Red
 }
@@ -77,33 +75,7 @@ if ($aci) {
          if ($aci.IpAddress.Fqdn) {
              Write-Host "     Adresas: http://$($aci.IpAddress.Fqdn)" -ForegroundColor Cyan
          }
-         
-         Write-Host "`n     --- Veikiantys konteineriai: ---" -ForegroundColor Gray
-         
-         # Hybrid Check: PS + CLI Backup
-         $containersList = $aci.Containers
-         if (-not $containersList) {
-             try {
-                 $jsonInfo = az container show --resource-group $labRG.ResourceGroupName --name $aci.Name --output json | ConvertFrom-Json
-                 $containersList = $jsonInfo.containers
-             } catch {}
-         }
-
-         if ($containersList) {
-             foreach ($container in $containersList) {
-                 $imgName = if ($container.image) { $container.image } else { $container.Image }
-                 $contName = if ($container.name) { $container.name } else { $container.Name }
-                 
-                 if ($imgName -match "azurecr.io") {
-                     Write-Host "     [+] $contName : $imgName (Jūsų Privatus)" -ForegroundColor Green
-                 } else {
-                     Write-Host "     [-] $contName : $imgName (Viešas/Default)" -ForegroundColor Yellow
-                 }
-             }
-         } else {
-             Write-Host "     [KLAIDA] Nepavyko nuskaityti sąrašo." -ForegroundColor Red
-         }
-
+         # Konteinerių sąrašas pašalintas, kad būtų švariau
     } else {
          Write-Host "[KLAIDA] Statusas: $($aci.ProvisioningState)" -ForegroundColor Red
     }
