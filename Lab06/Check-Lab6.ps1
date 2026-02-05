@@ -1,8 +1,9 @@
 <#
 .SYNOPSIS
-    LAB 09/10 Patikrinimo Scriptas (Student Version)
+    LAB 09/10 Patikrinimo Scriptas (Student Version v3.0)
 .DESCRIPTION
-    Tikrina: ACR, Linux VM, Portus ir ACI (turi būti Custom Image).
+    Tikrina: ACR, Linux VM, Portus ir ACI.
+    Apsaugotas nuo 'Null Array' klaidų.
 #>
 
 $ScriptVersion = "LAB 09/10 Check: Docker & Cloud"
@@ -14,7 +15,6 @@ $labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LA
 
 if (-not $labRG) {
     Write-Host "[KLAIDA] Nerasta resursų grupė, prasidedanti 'RG-LAB09...'" -ForegroundColor Red
-    Write-Host "         Patikrinkite, ar sukūrėte grupę teisingu pavadinimu."
     exit
 }
 Write-Host "[OK] Rasta grupė: $($labRG.ResourceGroupName)" -ForegroundColor Green
@@ -30,19 +30,17 @@ if ($acr) {
     try {
         $repos = az acr repository list --name $acr.Name --output tsv 2>$null
         if ($repos) {
-             # Ieškome studento sukurto vaizdo (filtruojame hello-world, jei toks yra)
+             # Ieškome studento sukurto vaizdo (filtruojame hello-world)
              $customImages = $repos | Where-Object { $_ -notmatch "hello-world" -and $_ -notmatch "aci-helloworld" }
              
              if ($customImages) {
                  Write-Host "[OK] Jūsų sukurtas vaizdas rastas registre: $customImages" -ForegroundColor Green
              } else {
-                 Write-Host "[TRŪKSTA] Registre yra tik 'hello-world'. Trūksta jūsų sukurto (Push) vaizdo." -ForegroundColor Yellow
+                 Write-Host "[INFO] Registre rastas tik 'hello-world' vaizdas." -ForegroundColor Yellow
              }
-        } else {
-             Write-Host "[TRŪKSTA] Registras tuščias (nėra vaizdų)." -ForegroundColor Yellow
         }
     } catch {
-        Write-Host "[INFO] Nepavyko patikrinti vaizdų sąrašo (gali reikėti 'az login')." -ForegroundColor Gray
+        Write-Host "[INFO] Nepavyko nuskaityti vaizdų sąrašo." -ForegroundColor Gray
     }
 } else {
     Write-Host "[KLAIDA] Nerastas Container Registry (ACR)" -ForegroundColor Red
@@ -83,39 +81,38 @@ Write-Host "`n--- 3. Container Instance (Svetainė) ---" -ForegroundColor Cyan
 $aci = Get-AzContainerGroup -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
 
 if ($aci) {
-    # Būsenos tikrinimas (ProvisioningState)
+    # Būsenos tikrinimas
     if ($aci.ProvisioningState -eq "Succeeded" -or $aci.ProvisioningState -eq "Running") {
          Write-Host "[OK] Konteineris veikia." -ForegroundColor Green
          if ($aci.IpAddress.Fqdn) {
              Write-Host "     Adresas: http://$($aci.IpAddress.Fqdn)" -ForegroundColor Cyan
          }
          
-         # --- KRITINIS TIKRINIMAS: Ar tai studento vaizdas? ---
-         $isStudentImage = $false
-         $imageName = "Unknown"
+         # --- SAUGUS VAIZDO TIKRINIMAS (BE KLAIDŲ) ---
+         $imageSource = "Unknown/Public"
+         $isPrivate = $false
 
-         # Tikriname saugiai, be klaidų
+         # 1 Būdas: Bandome skaityti Containers masyvą (jei jis ne tuščias)
          if ($aci.Containers -and $aci.Containers.Count -gt 0) {
-             $imageName = $aci.Containers[0].Image
-             if ($imageName -match "azurecr.io") {
-                 $isStudentImage = $true
-             }
-         } elseif ($aci.ImageRegistryCredentials) {
-             # Jei konteineris turi prisijungimus, vadinasi naudoja privatų registrą
-             $isStudentImage = $true
-             $imageName = "Private Image (ACR)"
+             $imageSource = $aci.Containers[0].Image
+             if ($imageSource -match "azurecr.io") { $isPrivate = $true }
+         } 
+         # 2 Būdas: Tikriname ImageRegistryCredentials (jei masyvas tuščias, bet yra slaptažodžiai)
+         elseif ($aci.ImageRegistryCredentials -and $aci.ImageRegistryCredentials.Count -gt 0) {
+             $isPrivate = $true
+             $imageSource = "Private Registry Image"
          }
 
-         if ($isStudentImage) {
-             Write-Host "[PUIKU] Naudojamas jūsų unikalus vaizdas ($imageName)." -ForegroundColor Green
+         # Rezultato spausdinimas
+         if ($isPrivate) {
+             Write-Host "[PUIKU] Naudojamas jūsų unikalus vaizdas ($imageSource)." -ForegroundColor Green
          } else {
-             Write-Host "[PASTABA] Naudojamas viešas/demo vaizdas ($imageName)." -ForegroundColor Yellow
-             Write-Host "          Kad gautumėte 10, turite paleisti savo sukurtą 'mantas-web' vaizdą." -ForegroundColor Yellow
+             Write-Host "[PASTABA] Naudojamas viešas 'Hello World' vaizdas." -ForegroundColor Yellow
+             Write-Host "          (Tai tinka įskaitai, bet 10 balų vertas darbas naudotų 'mantas-web' vaizdą)." -ForegroundColor Gray
          }
 
     } else {
          Write-Host "[KLAIDA] Konteineris bando pasileisti, bet statusas: $($aci.ProvisioningState)" -ForegroundColor Red
-         Write-Host "         Pabandykite ištrinti ir kurti iš naujo, patikrinę slaptažodį."
     }
 } else {
     Write-Host "[KLAIDA] Nerastas veikiantis ACI konteineris." -ForegroundColor Red
