@@ -65,7 +65,7 @@ $aci = Get-AzContainerGroup -ResourceGroupName $labRG.ResourceGroupName -ErrorAc
 
 if ($aci) {
     if ($aci.ProvisioningState -eq "Succeeded" -or $aci.ProvisioningState -eq "Running") {
-         Write-Host "[OK] Konteinerių grupė veikia." -ForegroundColor Green
+         Write-Host "[OK] Konteinerių grupė veikia..." -ForegroundColor Green
          if ($aci.IpAddress.Fqdn) {
              Write-Host "     Adresas: http://$($aci.IpAddress.Fqdn)" -ForegroundColor Cyan
          }
