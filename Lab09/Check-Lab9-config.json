@@ -1,0 +1,27 @@
+{
+  "LabName": "LAB 09: Azure Docker ir Linux VM",
+  "Description": "Checks for Container Registry, Custom Images, Linux VM configuration, and ACI deployment.",
+  "ResourceGroupPattern": "RG-LAB09",
+  "RequiredResources": [
+    {
+      "Type": "Microsoft.ContainerRegistry/registries",
+      "Name": "Azure Container Registry (ACR)",
+      "Description": "Saugykla jūsų Docker vaizdams"
+    },
+    {
+      "Type": "Microsoft.Compute/virtualMachines",
+      "Name": "DockerVM (Linux)",
+      "Description": "Virtuali mašina su Docker varikliu"
+    },
+    {
+      "Type": "Microsoft.Network/networkSecurityGroups",
+      "Name": "Network Security Group",
+      "Description": "Ugniasienė (Portai 80 ir 9000)"
+    },
+    {
+      "Type": "Microsoft.ContainerInstance/containerGroups",
+      "Name": "Container Instance (ACI)",
+      "Description": "Galutinė veikianti svetainė (Serverless)"
+    }
+  ]
+}
