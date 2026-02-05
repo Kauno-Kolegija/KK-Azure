@@ -92,13 +92,16 @@ Write-Host "`n--- 3. Container Instance (Svetainė) ---" -ForegroundColor Cyan
 $aci = Get-AzContainerGroup -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
 
 if ($aci) {
-    if ($aci.State -eq "Succeeded" -or $aci.State -eq "Running") {
+    # PATAISYMAS: Naudojame ProvisioningState vietoje State
+    $state = $aci.ProvisioningState
+
+    if ($state -eq "Succeeded" -or $state -eq "Running") {
          Write-Host "[OK] Konteineris veikia: $($aci.Name)" -ForegroundColor Green
          if ($aci.IpAddress.Fqdn) {
              Write-Host "     Svetainės adresas: http://$($aci.IpAddress.Fqdn)" -ForegroundColor Cyan
          }
          
-         # Tikriname ar naudojamas custom image (iš privataus registro)
+         # Tikriname ar naudojamas custom image
          if ($aci.Containers[0].Image -match "azurecr.io") {
              Write-Host "[OK] Naudojamas privatus vaizdas iš ACR." -ForegroundColor Green
          } else {
@@ -106,7 +109,7 @@ if ($aci) {
          }
 
     } else {
-         Write-Host "[KLAIDA] Konteineris yra būsenoje: $($aci.State)" -ForegroundColor Red
+         Write-Host "[KLAIDA] Konteineris yra būsenoje: $state" -ForegroundColor Red
     }
 } else {
     Write-Host "[KLAIDA] Nerastas veikiantis ACI konteineris." -ForegroundColor Red
