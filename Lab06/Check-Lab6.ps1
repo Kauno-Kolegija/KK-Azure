@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
-    LAB 09/10 Patikrinimo Scriptas (Final Version - List All)
+    LAB 09/10 Patikrinimo Scriptas (Hybrid Version v4.0)
 .DESCRIPTION
-    Tikrina: ACR, Linux VM, Portus ir išvardina visus ACI konteinerius.
+    Tikrina: ACR, VM, Portus.
+    ACI tikrinimui naudoja ir PowerShell, ir Azure CLI (backup), kad garantuotų sąrašą.
 #>
 
-$ScriptVersion = "LAB 09/10 Check: Docker & Cloud"
+$ScriptVersion = "LAB 09/10 Check: Hybrid & Robust"
 Clear-Host
 Write-Host "--- $ScriptVersion ---" -ForegroundColor Cyan
 
@@ -13,8 +14,7 @@ Write-Host "--- $ScriptVersion ---" -ForegroundColor Cyan
 $labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB09" } | Select-Object -First 1
 
 if (-not $labRG) {
-    Write-Host "[KLAIDA] Nerasta resursų grupė 'RG-LAB09...'" -ForegroundColor Red
-    exit
+    Write-Host "[KLAIDA] Nerasta resursų grupė 'RG-LAB09...'" -ForegroundColor Red; exit
 }
 Write-Host "[OK] Rasta grupė: $($labRG.ResourceGroupName)" -ForegroundColor Green
 
@@ -59,26 +59,38 @@ if ($vm) {
     Write-Host "[TRŪKSTA] Nerasta VM 'DockerVM'." -ForegroundColor Red
 }
 
-# --- 4. ACI (Svetainė) - SĄRAŠO VERSIJA ---
+# --- 4. ACI (Svetainė) - HYBRID CHECK ---
 Write-Host "`n--- 3. Container Instance (Svetainė) ---" -ForegroundColor Cyan
 $aci = Get-AzContainerGroup -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
 
 if ($aci) {
     if ($aci.ProvisioningState -eq "Succeeded" -or $aci.ProvisioningState -eq "Running") {
-         Write-Host "[OK] Konteinerių grupė veikia..." -ForegroundColor Green
+         Write-Host "[OK] Konteinerių grupė veikia." -ForegroundColor Green
          if ($aci.IpAddress.Fqdn) {
              Write-Host "     Adresas: http://$($aci.IpAddress.Fqdn)" -ForegroundColor Cyan
          }
          
          Write-Host "`n     --- Konteinerių sąrašas: ---" -ForegroundColor Gray
          
-         # CIKLAS PER VISUS KONTEINERIUS
-         if ($aci.Containers) {
-             foreach ($container in $aci.Containers) {
-                 $imgName = $container.Image
-                 $contName = $container.Name
+         # 1 BŪDAS: Bandome per PowerShell objektą
+         $containersList = $aci.Containers
+         
+         # 2 BŪDAS (Fallback): Jei PowerShell tuščias, naudojame Azure CLI
+         if (-not $containersList) {
+             # Write-Host "     [DEBUG] PowerShell objektas tuščias, bandome CLI..." -ForegroundColor DarkGray
+             try {
+                 $jsonInfo = az container show --resource-group $labRG.ResourceGroupName --name $aci.Name --output json | ConvertFrom-Json
+                 $containersList = $jsonInfo.containers
+             } catch {}
+         }
+
+         # SĄRAŠO SPAUSDINIMAS
+         if ($containersList) {
+             foreach ($container in $containersList) {
+                 # CLI ir PS objektų struktūros gali skirtis, normalizuojame
+                 $imgName = if ($container.image) { $container.image } else { $container.Image }
+                 $contName = if ($container.name) { $container.name } else { $container.Name }
                  
-                 # Tikriname ar privatus
                  if ($imgName -match "azurecr.io") {
                      Write-Host "     [+] $contName : $imgName (Jūsų Privatus)" -ForegroundColor Green
                  } else {
@@ -86,14 +98,14 @@ if ($aci) {
                  }
              }
          } else {
-             Write-Host "     [INFO] Negalima nuskaityti detalaus sąrašo." -ForegroundColor Gray
+             Write-Host "     [KLAIDA] Nepavyko nuskaityti sąrašo nei per PS, nei per CLI." -ForegroundColor Red
          }
 
     } else {
          Write-Host "[KLAIDA] Statusas: $($aci.ProvisioningState)" -ForegroundColor Red
     }
 } else {
-    Write-Host "[KLAIDA] Nerastas ACI konteineris. " -ForegroundColor Red
+    Write-Host "[KLAIDA] Nerastas ACI konteineris." -ForegroundColor Red
 }
 
 Write-Host "`n--- TIKRINIMAS BAIGTAS ---" -ForegroundColor Cyan
