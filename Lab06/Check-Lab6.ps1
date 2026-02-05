@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    LAB 09/10 Patikrinimo Scriptas (v5.0 - Full Repository Check)
+    LAB 09/10 Patikrinimo Scriptas (v6.0 - Compact)
 .DESCRIPTION
-    Tikrina: ACR (išvardina repos), VM, Portus ir ACI (išvardina konteinerius).
+    Tikrina: ACR (sutrumpintai), VM, Portus, ACI (tik statusą ir URL).
 #>
 
-$ScriptVersion = "LAB 09/10 Check: Repositories & Containers"
+$ScriptVersion = "LAB 09/10 Check: Final Version"
 Clear-Host
 Write-Host "--- $ScriptVersion ---" -ForegroundColor Cyan
 
@@ -23,26 +23,24 @@ $acr = Get-AzContainerRegistry -ResourceGroupName $labRG.ResourceGroupName -Erro
 
 if ($acr) {
     Write-Host "[OK] Registras rastas: $($acr.Name)" -ForegroundColor Green
-    Write-Host "     Login Server: $($acr.LoginServer)" -ForegroundColor Gray
     
     try {
-        # Gauname repozitorijų sąrašą
-        $repos = az acr repository list --name $acr.Name --output tsv 2>$null
+        # Gauname repozitorijas ir iškart spausdiname po registru
+        $reposRaw = az acr repository list --name $acr.Name --output tsv 2>$null
+        $repos = $reposRaw -split "\s+" | Where-Object { $_ -ne "" }
         
         if ($repos) {
-             Write-Host "`n     --- Rastos repozitorijos (Images): ---" -ForegroundColor Gray
              foreach ($repo in $repos) {
-                 # Pažymime vartotojo sukurtus vaizdus žaliai
-                 if ($repo -notmatch "hello-world" -and $repo -notmatch "aci-helloworld") {
-                     Write-Host "     [+] $repo (Jūsų sukurtas)" -ForegroundColor Green
+                 if ($repo -match "hello-world" -or $repo -match "aci-helloworld") {
+                     Write-Host "     [+] $repo (Microsoft/Demo)" -ForegroundColor Yellow
                  } else {
-                     Write-Host "     [i] $repo (Microsoft/Demo)" -ForegroundColor Yellow
+                     Write-Host "     [+] $repo (Jūsų sukurtas)" -ForegroundColor Green
                  }
              }
         } else {
-             Write-Host "     [INFO] Repozitorijų nerasta (Registras tuščias)." -ForegroundColor Yellow
+             Write-Host "     [INFO] Registras tuščias." -ForegroundColor Yellow
         }
-    } catch { Write-Host "[INFO] Nepavyko nuskaityti vaizdų sąrašo." -ForegroundColor Gray }
+    } catch { }
 } else {
     Write-Host "[KLAIDA] Nerastas ACR" -ForegroundColor Red
 }
@@ -67,7 +65,7 @@ if ($vm) {
     Write-Host "[TRŪKSTA] Nerasta VM 'DockerVM'." -ForegroundColor Red
 }
 
-# --- 4. ACI (Svetainė) - HYBRID CHECK ---
+# --- 4. ACI (Svetainė) ---
 Write-Host "`n--- 3. Container Instance (Svetainė) ---" -ForegroundColor Cyan
 $aci = Get-AzContainerGroup -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
 
@@ -77,36 +75,7 @@ if ($aci) {
          if ($aci.IpAddress.Fqdn) {
              Write-Host "     Adresas: http://$($aci.IpAddress.Fqdn)" -ForegroundColor Cyan
          }
-         
-         Write-Host "`n     --- Veikiantys konteineriai: ---" -ForegroundColor Gray
-         
-         # 1. Bandome per PowerShell
-         $containersList = $aci.Containers
-         
-         # 2. Bandome per CLI (Backup)
-         if (-not $containersList) {
-             try {
-                 $jsonInfo = az container show --resource-group $labRG.ResourceGroupName --name $aci.Name --output json | ConvertFrom-Json
-                 $containersList = $jsonInfo.containers
-             } catch {}
-         }
-
-         # Spausdiname sąrašą
-         if ($containersList) {
-             foreach ($container in $containersList) {
-                 $imgName = if ($container.image) { $container.image } else { $container.Image }
-                 $contName = if ($container.name) { $container.name } else { $container.Name }
-                 
-                 if ($imgName -match "azurecr.io") {
-                     Write-Host "     [+] $contName : $imgName (Jūsų Privatus)" -ForegroundColor Green
-                 } else {
-                     Write-Host "     [-] $contName : $imgName (Viešas/Default)" -ForegroundColor Yellow
-                 }
-             }
-         } else {
-             Write-Host "     [KLAIDA] Nepavyko nuskaityti konteinerių sąrašo." -ForegroundColor Red
-         }
-
+         # Konteinerių sąrašas pašalintas, kad būtų švariau
     } else {
          Write-Host "[KLAIDA] Statusas: $($aci.ProvisioningState)" -ForegroundColor Red
     }
