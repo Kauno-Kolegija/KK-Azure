@@ -83,4 +83,4 @@ if ($aci) {
     Write-Host "[KLAIDA] Nerastas ACI konteineris." -ForegroundColor Red
 }
 
-Write-Host "`n--- TIKRINIMAS BAIGTAS ---" -ForegroundColor Cyan
+Write-Host "--- TIKRINIMAS BAIGTAS ---" -ForegroundColor Cyan
