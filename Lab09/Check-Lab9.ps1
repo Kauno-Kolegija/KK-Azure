@@ -1,12 +1,11 @@
 <#
 .SYNOPSIS
-    LAB 09/10 Patikrinimo Scriptas (Hybrid Version v4.0)
+    LAB 09/10 Patikrinimo Scriptas (v5.0 - Full Repository Check)
 .DESCRIPTION
-    Tikrina: ACR, VM, Portus.
-    ACI tikrinimui naudoja ir PowerShell, ir Azure CLI (backup), kad garantuotų sąrašą.
+    Tikrina: ACR (išvardina repos), VM, Portus ir ACI (išvardina konteinerius).
 #>
 
-$ScriptVersion = "LAB 09/10 Check: Hybrid & Robust"
+$ScriptVersion = "LAB 09/10 Check: Repositories & Containers"
 Clear-Host
 Write-Host "--- $ScriptVersion ---" -ForegroundColor Cyan
 
@@ -24,15 +23,24 @@ $acr = Get-AzContainerRegistry -ResourceGroupName $labRG.ResourceGroupName -Erro
 
 if ($acr) {
     Write-Host "[OK] Registras rastas: $($acr.Name)" -ForegroundColor Green
+    Write-Host "     Login Server: $($acr.LoginServer)" -ForegroundColor Gray
+    
     try {
+        # Gauname repozitorijų sąrašą
         $repos = az acr repository list --name $acr.Name --output tsv 2>$null
+        
         if ($repos) {
-             $customImages = $repos | Where-Object { $_ -notmatch "hello-world" -and $_ -notmatch "aci-helloworld" }
-             if ($customImages) {
-                 Write-Host "[OK] Jūsų sukurtas vaizdas rastas registre: $customImages" -ForegroundColor Green
-             } else {
-                 Write-Host "[INFO] Registre rastas tik 'hello-world' vaizdas." -ForegroundColor Yellow
+             Write-Host "`n     --- Rastos repozitorijos (Images): ---" -ForegroundColor Gray
+             foreach ($repo in $repos) {
+                 # Pažymime vartotojo sukurtus vaizdus žaliai
+                 if ($repo -notmatch "hello-world" -and $repo -notmatch "aci-helloworld") {
+                     Write-Host "     [+] $repo (Jūsų sukurtas)" -ForegroundColor Green
+                 } else {
+                     Write-Host "     [i] $repo (Microsoft/Demo)" -ForegroundColor Yellow
+                 }
              }
+        } else {
+             Write-Host "     [INFO] Repozitorijų nerasta (Registras tuščias)." -ForegroundColor Yellow
         }
     } catch { Write-Host "[INFO] Nepavyko nuskaityti vaizdų sąrašo." -ForegroundColor Gray }
 } else {
@@ -70,24 +78,22 @@ if ($aci) {
              Write-Host "     Adresas: http://$($aci.IpAddress.Fqdn)" -ForegroundColor Cyan
          }
          
-         Write-Host "`n     --- Konteinerių sąrašas: ---" -ForegroundColor Gray
+         Write-Host "`n     --- Veikiantys konteineriai: ---" -ForegroundColor Gray
          
-         # 1 BŪDAS: Bandome per PowerShell objektą
+         # 1. Bandome per PowerShell
          $containersList = $aci.Containers
          
-         # 2 BŪDAS (Fallback): Jei PowerShell tuščias, naudojame Azure CLI
+         # 2. Bandome per CLI (Backup)
          if (-not $containersList) {
-             # Write-Host "     [DEBUG] PowerShell objektas tuščias, bandome CLI..." -ForegroundColor DarkGray
              try {
                  $jsonInfo = az container show --resource-group $labRG.ResourceGroupName --name $aci.Name --output json | ConvertFrom-Json
                  $containersList = $jsonInfo.containers
              } catch {}
          }
 
-         # SĄRAŠO SPAUSDINIMAS
+         # Spausdiname sąrašą
          if ($containersList) {
              foreach ($container in $containersList) {
-                 # CLI ir PS objektų struktūros gali skirtis, normalizuojame
                  $imgName = if ($container.image) { $container.image } else { $container.Image }
                  $contName = if ($container.name) { $container.name } else { $container.Name }
                  
@@ -98,7 +104,7 @@ if ($aci) {
                  }
              }
          } else {
-             Write-Host "     [KLAIDA] Nepavyko nuskaityti sąrašo nei per PS, nei per CLI." -ForegroundColor Red
+             Write-Host "     [KLAIDA] Nepavyko nuskaityti konteinerių sąrašo." -ForegroundColor Red
          }
 
     } else {
