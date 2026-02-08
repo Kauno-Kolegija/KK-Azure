@@ -64,7 +64,7 @@ if ($storage) {
             if ($count -gt 0) {
                 Write-Host " [OK] 🏆  Archyve rasta failų:" -ForegroundColor Green -NoNewline
                 Write-Host " $count" -ForegroundColor Yellow -NoNewline
-                Write-Host ". Robotas veikia!" -ForegroundColor Yellow
+                Write-Host ". Robotas veikia!" -ForegroundColor Green
             } else {
                 Write-Host " [INFO] Archyvas tuščias (0 failų)." -ForegroundColor Gray
             }
