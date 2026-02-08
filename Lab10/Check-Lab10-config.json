@@ -1,5 +1,5 @@
 {
-  "LabName": "Lab 10: Azure Automation & Storage",
+  "LabName": "Lab 10: Azure Automation",
   "ResourceGroup": {
     "Pattern": "RG-Lab10-*"
   },
