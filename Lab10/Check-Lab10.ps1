@@ -1,12 +1,12 @@
-# --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (Su Config) ---
+# --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (v2 - Su skaičiavimu) ---
 $ErrorActionPreference = "SilentlyContinue"
 
 # 1. Konfigūracijos gavimas
-# Pakeiskite URL į savo GitHub vietą, kur gulės Check-Lab10-config.json
 $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab10/Check-Lab10-config.json"
 
 try {
     $Config = Invoke-RestMethod -Uri $ConfigUrl -ErrorAction Stop
+    # Jei norite be emoji, galite tiesiog ištrinti 🕵️‍♂️ simbolį žemiau
     Write-Host "`n--- 🕵️‍♂️ PRADEDAMA PATIKRA: $($Config.LabName) ---`n" -ForegroundColor Cyan
 } catch {
     Write-Host " [KRITINĖ KLAIDA] Nepavyko atsisiųsti konfigūracijos failo ($ConfigUrl)" -ForegroundColor Red
@@ -29,7 +29,6 @@ $webApp = Get-AzWebApp -ResourceGroupName $rg.ResourceGroupName | Select-Object 
 if ($webApp) {
     Write-Host " [OK] Web App rasta: $($webApp.Name)" -ForegroundColor Green
     
-    # Tikriname ar svetainė atsidaro naudodami HealthEndpoint iš JSON
     $url = "https://$($webApp.DefaultHostName)$($Config.WebApp.HealthEndpoint)"
     try {
         $request = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
@@ -45,7 +44,7 @@ if ($webApp) {
     Write-Host " [FAIL] Web App nerasta!" -ForegroundColor Red
 }
 
-# 4. Ieškome Storage ir Konteinerio
+# 4. Ieškome Storage ir Konteinerio (SU SKAIČIAVIMU)
 $storage = Get-AzStorageAccount -ResourceGroupName $rg.ResourceGroupName | Select-Object -First 1
 
 if ($storage) {
@@ -64,12 +63,15 @@ if ($storage) {
     if ($container) { 
         Write-Host " [OK] Blob Container '$($Config.Storage.BlobContainerName)' egzistuoja" -ForegroundColor Green 
         
-        # Bonus patikrinimas
+        # --- NAUJA DALIS: Skaičiuojame failus ---
         $blobs = Get-AzStorageBlob -Container $Config.Storage.BlobContainerName -Context $ctx
-        if ($blobs.Count -gt 0) {
-            Write-Host " [OK] 🏆 Archyve rasta failų! Robotas veikia!" -ForegroundColor Yellow
+        # @($blobs).Count užtikrina, kad veiks net jei failas tik 1 arba 0
+        $count = @($blobs).Count 
+
+        if ($count -gt 0) {
+            Write-Host " [OK] 🏆 Archyve rasta failų: $count. Robotas veikia!" -ForegroundColor Yellow
         } else {
-            Write-Host " [INFO] Archyvas tuščias (Robotas dar nespėjo suveikti arba nėra logų)" -ForegroundColor Gray
+            Write-Host " [INFO] Archyvas tuščias (0 failų). (Robotas dar nespėjo suveikti arba nėra logų)" -ForegroundColor Gray
         }
     } else { 
         Write-Host " [FAIL] Blob Container '$($Config.Storage.BlobContainerName)' nerastas" -ForegroundColor Red 
