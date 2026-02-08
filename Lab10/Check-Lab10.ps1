@@ -1,4 +1,4 @@
-# --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (Final Clean) ---
+# --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (v7 - App Type Fix) ---
 $ErrorActionPreference = "SilentlyContinue"
 
 # 1. Konfigūracija
@@ -23,19 +23,21 @@ if ($plan) {
     }
 }
 
-# 4. Web App
-$webApp = Get-AzWebApp -ResourceGroupName $rg.ResourceGroupName | Select-Object -First 1
+# 4. Web App (PATAISYMAS: Atmetame Function Apps)
+# Ieškome tikros Web App, ignoruodami "functionapp" tipą
+$webApp = Get-AzWebApp -ResourceGroupName $rg.ResourceGroupName | Where-Object { $_.Kind -ne "functionapp" } | Select-Object -First 1
+
 if ($webApp) {
     Write-Host " [OK] Web App rasta: $($webApp.Name)" -ForegroundColor Green
     
-    # Tikriname Mount Path (Tik jei API grąžina sėkmę - parodome. Jei ne - tylime)
+    # Tikriname Mount Path (Tik jei API grąžina sėkmę - parodome)
     $mappings = Get-AzWebAppAzureStoragePath -ResourceGroupName $rg.ResourceGroupName -Name $webApp.Name
     $logMount = $mappings | Where-Object { $_.MountPath -eq "/mounts/logs" }
 
     if ($logMount) {
          Write-Host " [OK] Storage prijungtas teisingai: /mounts/logs" -ForegroundColor Green
     } 
-    
+
     # Health Check
     $url = "https://$($webApp.DefaultHostName)$($Config.WebApp.HealthEndpoint)"
     try {
