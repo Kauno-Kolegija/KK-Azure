@@ -1,0 +1,17 @@
+{
+  "LabName": "Lab 10: Azure Automation & Storage",
+  "ResourceGroup": {
+    "Pattern": "RG-Lab10-*"
+  },
+  "WebApp": {
+    "HealthEndpoint": "/health.asp",
+    "ExpectedStatus": 200
+  },
+  "Storage": {
+    "FileShareName": "logs",
+    "BlobContainerName": "archyvas"
+  },
+  "FunctionApp": {
+    "RequiredState": "Running"
+  }
+}
