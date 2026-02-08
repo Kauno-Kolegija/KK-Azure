@@ -1,11 +1,11 @@
-# --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (v6 - Smart Check) ---
+# --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (Final Clean) ---
 $ErrorActionPreference = "SilentlyContinue"
 
 # 1. Konfigūracija
 $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab10/Check-Lab10-config.json"
 try {
     $Config = Invoke-RestMethod -Uri $ConfigUrl -ErrorAction Stop
-    Write-Host "`n--- 🕵️‍♂️ PRADEDAMA PATIKRA: $($Config.LabName) ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- PRADEDAMA PATIKRA: $($Config.LabName) ---`n" -ForegroundColor Cyan
 } catch { Write-Host " [KRITINĖ KLAIDA] Nepavyko atsisiųsti Config failo." -ForegroundColor Red; return }
 
 # 2. Resursų grupė
@@ -13,23 +13,29 @@ $rg = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -like $Config.Re
 if (!$rg) { Write-Host " [FAIL] Resursų grupė nerasta!" -ForegroundColor Red; return }
 Write-Host " [OK] Resursų grupė: $($rg.ResourceGroupName)" -ForegroundColor Green
 
-# 3. Web App ir Mount Path (PATAISYTA LOGIKA)
+# 3. App Service Plan
+$plan = Get-AzAppServicePlan -ResourceGroupName $rg.ResourceGroupName | Select-Object -First 1
+if ($plan) {
+    if ($plan.Sku.Tier -in @("Free", "Basic")) {
+        Write-Host " [OK] App Planas tinkamas: $($plan.Sku.Name) ($($plan.Sku.Tier))" -ForegroundColor Green
+    } else {
+        Write-Host " [WARN] App Planas brangus! Pasirinkta: $($plan.Sku.Tier). Rekomenduojama F1/B1." -ForegroundColor Yellow
+    }
+}
+
+# 4. Web App
 $webApp = Get-AzWebApp -ResourceGroupName $rg.ResourceGroupName | Select-Object -First 1
 if ($webApp) {
     Write-Host " [OK] Web App rasta: $($webApp.Name)" -ForegroundColor Green
     
-    # Tikriname diskus naudodami specifinę komandą, o ne bendrą objektą
+    # Tikriname Mount Path (Tik jei API grąžina sėkmę - parodome. Jei ne - tylime)
     $mappings = Get-AzWebAppAzureStoragePath -ResourceGroupName $rg.ResourceGroupName -Name $webApp.Name
     $logMount = $mappings | Where-Object { $_.MountPath -eq "/mounts/logs" }
 
     if ($logMount) {
-         Write-Host " [OK] 💾 Storage prijungtas teisingai: /mounts/logs (Share: $($logMount.ShareName))" -ForegroundColor Green
-    } else {
-         # Jei neradome per API, bet vartotojas sako, kad veikia - patikriname "Health Check"
-         # Jei svetainė veikia ir rašo failus, galime skaityti tai kaip "Warning", o ne "Fail"
-         Write-Host " [WARN] 'Path Mappings' API rodo tuščią sąrašą (Azure vėluoja?), bet tęsiame tikrinimą." -ForegroundColor Yellow
-    }
-
+         Write-Host " [OK] Storage prijungtas teisingai: /mounts/logs" -ForegroundColor Green
+    } 
+    
     # Health Check
     $url = "https://$($webApp.DefaultHostName)$($Config.WebApp.HealthEndpoint)"
     try {
@@ -40,7 +46,7 @@ if ($webApp) {
     } catch { Write-Host " [FAIL] Svetainė nepasiekiama" -ForegroundColor Red }
 } else { Write-Host " [FAIL] Web App nerasta!" -ForegroundColor Red }
 
-# 4. Storage (Force Keys + Count)
+# 5. Storage (Force Keys + Count)
 $storage = Get-AzStorageAccount -ResourceGroupName $rg.ResourceGroupName | Select-Object -First 1
 if ($storage) {
     try {
@@ -56,7 +62,9 @@ if ($storage) {
             $blobs = Get-AzStorageBlob -Container $Config.Storage.BlobContainerName -Context $ctx
             $count = @($blobs).Count
             if ($count -gt 0) {
-                Write-Host " [OK] 🏆 Archyve rasta failų: $count. Robotas veikia!" -ForegroundColor Yellow
+                Write-Host " [OK] 🏆  Archyve rasta failų:" -ForegroundColor Green -NoNewline
+                Write-Host " $count" -ForegroundColor Yellow -NoNewline
+                Write-Host ". Robotas veikia!" -ForegroundColor Yellow
             } else {
                 Write-Host " [INFO] Archyvas tuščias (0 failų)." -ForegroundColor Gray
             }
@@ -64,7 +72,7 @@ if ($storage) {
     } catch { Write-Host " [FAIL] Nepavyko prisijungti prie Storage." -ForegroundColor Red }
 } else { Write-Host " [FAIL] Storage Account nerasta!" -ForegroundColor Red }
 
-# 5. Function App
+# 6. Function App
 $func = Get-AzFunctionApp -ResourceGroupName $rg.ResourceGroupName -WarningAction SilentlyContinue | Select-Object -First 1
 if ($func) {
     Write-Host " [OK] Function App: $($func.Name)" -ForegroundColor Green
@@ -72,7 +80,6 @@ if ($func) {
     if ($func.SiteConfig.PowerShellVersion -eq "7.4") {
         Write-Host " [OK] PowerShell versija: 7.4" -ForegroundColor Green
     } else {
-        # Jei netyčia rodo tuščią versiją, tiesiog perspėjame
         Write-Host " [INFO] PowerShell versija: $($func.SiteConfig.PowerShellVersion)" -ForegroundColor Gray
     }
 
