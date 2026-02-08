@@ -6,8 +6,7 @@ $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab
 
 try {
     $Config = Invoke-RestMethod -Uri $ConfigUrl -ErrorAction Stop
-    # Jei norite be emoji, galite tiesiog ištrinti 🕵️‍♂️ simbolį žemiau
-    Write-Host "`n--- 🕵️‍♂️ PRADEDAMA PATIKRA: $($Config.LabName) ---`n" -ForegroundColor Cyan
+        Write-Host "`n--- PRADEDAMA PATIKRA: $($Config.LabName) ---`n" -ForegroundColor Cyan
 } catch {
     Write-Host " [KRITINĖ KLAIDA] Nepavyko atsisiųsti konfigūracijos failo ($ConfigUrl)" -ForegroundColor Red
     return
