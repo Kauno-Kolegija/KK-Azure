@@ -1,4 +1,4 @@
-# --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (v2 - Su skaičiavimu) ---
+# --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (Final v3) ---
 $ErrorActionPreference = "SilentlyContinue"
 
 # 1. Konfigūracijos gavimas
@@ -6,7 +6,7 @@ $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab
 
 try {
     $Config = Invoke-RestMethod -Uri $ConfigUrl -ErrorAction Stop
-        Write-Host "`n--- PRADEDAMA PATIKRA: $($Config.LabName) ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- 🕵️‍♂️ PRADEDAMA PATIKRA: $($Config.LabName) ---`n" -ForegroundColor Cyan
 } catch {
     Write-Host " [KRITINĖ KLAIDA] Nepavyko atsisiųsti konfigūracijos failo ($ConfigUrl)" -ForegroundColor Red
     return
@@ -43,7 +43,7 @@ if ($webApp) {
     Write-Host " [FAIL] Web App nerasta!" -ForegroundColor Red
 }
 
-# 4. Ieškome Storage ir Konteinerio (SU SKAIČIAVIMU)
+# 4. Ieškome Storage ir Konteinerio
 $storage = Get-AzStorageAccount -ResourceGroupName $rg.ResourceGroupName | Select-Object -First 1
 
 if ($storage) {
@@ -62,15 +62,14 @@ if ($storage) {
     if ($container) { 
         Write-Host " [OK] Blob Container '$($Config.Storage.BlobContainerName)' egzistuoja" -ForegroundColor Green 
         
-        # --- NAUJA DALIS: Skaičiuojame failus ---
+        # Skaičiuojame failus (naudojame @(), kad masyvas veiktų net su 0 elementų)
         $blobs = Get-AzStorageBlob -Container $Config.Storage.BlobContainerName -Context $ctx
-        # @($blobs).Count užtikrina, kad veiks net jei failas tik 1 arba 0
         $count = @($blobs).Count 
 
         if ($count -gt 0) {
             Write-Host " [OK] 🏆 Archyve rasta failų: $count. Robotas veikia!" -ForegroundColor Yellow
         } else {
-            Write-Host " [INFO] Archyvas tuščias (0 failų). (Robotas dar nespėjo suveikti arba nėra logų)" -ForegroundColor Gray
+            Write-Host " [INFO] Archyvas tuščias (0 failų). Robotas dar neperkėlė duomenų." -ForegroundColor Gray
         }
     } else { 
         Write-Host " [FAIL] Blob Container '$($Config.Storage.BlobContainerName)' nerastas" -ForegroundColor Red 
@@ -81,7 +80,8 @@ if ($storage) {
 }
 
 # 5. Ieškome Function App
-$funcApp = Get-AzFunctionApp -ResourceGroupName $rg.ResourceGroupName | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
+# Čia pridėtas "-WarningAction SilentlyContinue", kad nerodytų App Settings įspėjimo
+$funcApp = Get-AzFunctionApp -ResourceGroupName $rg.ResourceGroupName -WarningAction SilentlyContinue | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
 
 if ($funcApp) {
     Write-Host " [OK] Function App rasta: $($funcApp.Name)" -ForegroundColor Green
