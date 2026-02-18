@@ -13,7 +13,7 @@ $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno
 $GlobCfg = $Setup.GlobalConfig
 $LocCfg  = $Setup.LocalConfig
 
-# --- 3. TYLUS TIKRINIMAS (Supaprastintas variantas) ---
+# --- 3. TYLUS TIKRINIMAS (Prioritetas Mantui) ---
 
 # A. Prenumeratos tikrinimas (Paliekame kaip buvo)
 $context = Get-AzContext
@@ -28,35 +28,51 @@ if ($isNameCorrect) {
     $res1Color = "Red"
 }
 
-# B. Dėstytojo teisių tikrinimas (Supaprastintas)
+# B. Dėstytojo teisių tikrinimas
 try {
-    # Gauname visus teisių priskyrimus
+    # 1. Gauname visus teisių priskyrimus tyliai
     $assignments = Get-AzRoleAssignment -IncludeClassicAdministrators -ErrorAction SilentlyContinue
-    
-    # Ieškome bet kokio įrašo, kuris:
-    # 1. Turi rolę 'Contributor'
-    # 2. NĖRA studento paskyra (pagal prisijungusį vartotoją)
-    # 3. Yra arba "Mantas" (pagal vardą) arba turi "@itm.kaunokolegija" (pagal domeną)
-    
     $currentUser = (Get-AzContext).Account.Id
     
-    $destytojas = $assignments | Where-Object { 
+    # 2. Atsifiltruojame visus CONTRIBUTOR, kurie nėra studentas
+    $allContributors = $assignments | Where-Object { 
         $_.RoleDefinitionName -eq "Contributor" -and 
-        $_.SignInName -ne $currentUser -and
-        ($_.DisplayName -match "Mantas" -or $_.SignInName -match "kaunokolegija" -or $_.DisplayName -match "Bartkevičius")
-    } | Select-Object -First 1
-    
-    if ($destytojas) {
-        # Jei radome, parodome ką radome (Vardą arba ID)
-        $foundName = if ($destytojas.DisplayName) { $destytojas.DisplayName } else { "Dėstytojas" }
-        $res2Text  = "[OK] - $foundName (Contributor)"
-        $res2Color = "Green"
+        $_.SignInName -ne $currentUser
+    }
+
+    if ($allContributors) {
+        # Suskaičiuojame kiek iš viso yra dėstytojų/kolegų
+        # Jei $allContributors yra vienas objektas, .Count gali neveikti senesnėse PS versijose, todėl @()
+        $totalCount = @($allContributors).Count
+
+        # 3. Ieškome KONKREČIAI Manto Bartkevičiaus
+        $mantas = $allContributors | Where-Object { 
+            $_.DisplayName -match "Mantas" -and $_.DisplayName -match "Bartkevičius" 
+        } | Select-Object -First 1
+
+        if ($mantas) {
+            # Jei radome Mantą - rodome jį
+            # Papildomai parodome, jei yra daugiau žmonių
+            $others = $totalCount - 1
+            $suffix = if ($others -gt 0) { " (+ $others kiti)" } else { "" }
+            
+            $res2Text  = "[OK] - $($mantas.DisplayName)$suffix"
+            $res2Color = "Green"
+        } else {
+            # Jei Manto neradome, bet radome kitų (pvz. Roką)
+            $firstOther = $allContributors | Select-Object -First 1
+            $name = if ($firstOther.DisplayName) { $firstOther.DisplayName } else { "Kolega" }
+            
+            $res2Text  = "[OK] - $name (Bet Mantas Bartkevičius nerastas)"
+            $res2Color = "Yellow" 
+        }
     } else {
-        $res2Text  = "[KLAIDA] - Nerasta 'Contributor' rolė dėstytojui (Mantas Bartkevičius)"
+        $res2Text  = "[KLAIDA] - Nerasta jokių vartotojų su 'Contributor' role (išskyrus jus)"
         $res2Color = "Red"
     }
+
 } catch {
-    $res2Text  = "[KLAIDA] - Nepavyko nuskaityti teisių. Bandykite dar kartą."
+    $res2Text  = "[KLAIDA] - Nepavyko nuskaityti teisių."
     $res2Color = "Red"
 }
 
