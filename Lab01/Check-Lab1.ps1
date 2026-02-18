@@ -36,7 +36,9 @@ try {
     # Filtruojame pagal dėstytojo el. pašto dalį ir Rolę
     # PATAISYMAS: Pridėtas "Select-Object -First 1", kad paimtų tik vieną įrašą
     $destytojas = $assignments | Where-Object { 
-        ($_.SignInName -match $GlobCfg.InstructorEmailMatch -or $_.DisplayName -match $GlobCfg.InstructorEmailMatch) -and 
+        ($_.SignInName -match $GlobCfg.InstructorEmailMatch -or 
+         $_.UserPrincipalName -match $GlobCfg.InstructorEmailMatch -or 
+         $_.DisplayName -match $GlobCfg.InstructorEmailMatch) -and 
         $_.RoleDefinitionName -eq $LocCfg.RoleToCheck 
     } | Select-Object -First 1
     
