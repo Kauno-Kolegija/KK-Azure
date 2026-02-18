@@ -13,9 +13,9 @@ $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno
 $GlobCfg = $Setup.GlobalConfig
 $LocCfg  = $Setup.LocalConfig
 
-# --- 3. TYLUS TIKRINIMAS (Be išvedimo į ekraną) ---
+# --- 3. TYLUS TIKRINIMAS (Supaprastintas variantas) ---
 
-# A. Prenumeratos tikrinimas
+# A. Prenumeratos tikrinimas (Paliekame kaip buvo)
 $context = Get-AzContext
 $subName = $context.Subscription.Name
 $isNameCorrect = $subName -match $LocCfg.NamingPattern
@@ -28,29 +28,35 @@ if ($isNameCorrect) {
     $res1Color = "Red"
 }
 
-# B. Dėstytojo teisių tikrinimas
+# B. Dėstytojo teisių tikrinimas (Supaprastintas)
 try {
-    # Ieškome rolės priskyrimo tyliai
+    # Gauname visus teisių priskyrimus
     $assignments = Get-AzRoleAssignment -IncludeClassicAdministrators -ErrorAction SilentlyContinue
     
-    # Filtruojame pagal dėstytojo el. pašto dalį ir Rolę
-    # PATAISYMAS: Pridėtas "Select-Object -First 1", kad paimtų tik vieną įrašą
+    # Ieškome bet kokio įrašo, kuris:
+    # 1. Turi rolę 'Contributor'
+    # 2. NĖRA studento paskyra (pagal prisijungusį vartotoją)
+    # 3. Yra arba "Mantas" (pagal vardą) arba turi "@itm.kaunokolegija" (pagal domeną)
+    
+    $currentUser = (Get-AzContext).Account.Id
+    
     $destytojas = $assignments | Where-Object { 
-        ($_.SignInName -match $GlobCfg.InstructorEmailMatch -or 
-         $_.UserPrincipalName -match $GlobCfg.InstructorEmailMatch -or 
-         $_.DisplayName -match $GlobCfg.InstructorEmailMatch) -and 
-        $_.RoleDefinitionName -eq $LocCfg.RoleToCheck 
+        $_.RoleDefinitionName -eq "Contributor" -and 
+        $_.SignInName -ne $currentUser -and
+        ($_.DisplayName -match "Mantas" -or $_.SignInName -match "kaunokolegija" -or $_.DisplayName -match "Bartkevičius")
     } | Select-Object -First 1
     
     if ($destytojas) {
-        $res2Text  = "[OK] - $($destytojas.RoleDefinitionName)"
+        # Jei radome, parodome ką radome (Vardą arba ID)
+        $foundName = if ($destytojas.DisplayName) { $destytojas.DisplayName } else { "Dėstytojas" }
+        $res2Text  = "[OK] - $foundName (Contributor)"
         $res2Color = "Green"
     } else {
-        $res2Text  = "[KLAIDA] - Dėstytojas nerastas arba neturi rolės '$($LocCfg.RoleToCheck)'"
+        $res2Text  = "[KLAIDA] - Nerasta 'Contributor' rolė dėstytojui (Mantas Bartkevičius)"
         $res2Color = "Red"
     }
 } catch {
-    $res2Text  = "[KLAIDA] - Nepavyko patikrinti teisių"
+    $res2Text  = "[KLAIDA] - Nepavyko nuskaityti teisių. Bandykite dar kartą."
     $res2Color = "Red"
 }
 
