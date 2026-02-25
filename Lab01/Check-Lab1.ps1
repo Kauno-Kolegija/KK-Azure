@@ -7,7 +7,6 @@ try {
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-# Setup grąžina visus kintamuosius ir išveda pradinę antraštę
 $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
 
 $GlobCfg = $Setup.GlobalConfig
@@ -15,7 +14,7 @@ $LocCfg  = $Setup.LocalConfig
 
 # --- 3. TYLUS TIKRINIMAS (Prioritetas Mantui) ---
 
-# A. Prenumeratos tikrinimas (Paliekame kaip buvo)
+# A. Prenumeratos tikrinimas
 $context = Get-AzContext
 $subName = $context.Subscription.Name
 $isNameCorrect = $subName -match $LocCfg.NamingPattern
@@ -30,38 +29,41 @@ if ($isNameCorrect) {
 
 # B. Dėstytojo teisių tikrinimas
 try {
-    # 1. Gauname visus teisių priskyrimus tyliai
-    $assignments = Get-AzRoleAssignment -IncludeClassicAdministrators -ErrorAction SilentlyContinue
-    $currentUser = (Get-AzContext).Account.Id
+    # PAKEITIMAS: Pašalintas nulūžtantis '-IncludeClassicAdministrators' parametras.
+    # Pridėtas konkretus Scope, kad išvengtume kitų Azure klaidų.
+    # Pakeista į '-ErrorAction Stop', kad matytume tikrą klaidą, jei tokia būtų.
+    $subId = $context.Subscription.Id
+    $assignments = Get-AzRoleAssignment -Scope "/subscriptions/$subId" -ErrorAction Stop
     
-    # 2. Atsifiltruojame visus CONTRIBUTOR, kurie nėra studentas
+    $currentUser = $context.Account.Id
+    
+    # Atsifiltruojame visus CONTRIBUTOR, kurie nėra pats studentas
     $allContributors = $assignments | Where-Object { 
         $_.RoleDefinitionName -eq "Contributor" -and 
         $_.SignInName -ne $currentUser
     }
 
     if ($allContributors) {
-        # Suskaičiuojame kiek iš viso yra dėstytojų/kolegų
-        # Jei $allContributors yra vienas objektas, .Count gali neveikti senesnėse PS versijose, todėl @()
         $totalCount = @($allContributors).Count
 
-        # 3. Ieškome KONKREČIAI Manto Bartkevičiaus
+        # Ieškome Manto pagal Vardą ir Pavardę arba el. paštą
         $mantas = $allContributors | Where-Object { 
-            $_.DisplayName -match "Mantas" -and $_.DisplayName -match "Bartkevičius" 
+            ($_.DisplayName -match "Mantas" -and $_.DisplayName -match "Bartkevičius") -or
+            $_.SignInName -match "Mantas.Bartkevicius"
         } | Select-Object -First 1
 
         if ($mantas) {
-            # Jei radome Mantą - rodome jį
-            # Papildomai parodome, jei yra daugiau žmonių
             $others = $totalCount - 1
             $suffix = if ($others -gt 0) { " (+ $others kiti)" } else { "" }
             
-            $res2Text  = "[OK] - $($mantas.DisplayName)$suffix"
+            # Jei Azure neduoda DisplayName, naudojame SignInName
+            $dispName = if ($mantas.DisplayName) { $mantas.DisplayName } else { $mantas.SignInName }
+            
+            $res2Text  = "[OK] - ${dispName}${suffix}"
             $res2Color = "Green"
         } else {
-            # Jei Manto neradome, bet radome kitų (pvz. Roką)
             $firstOther = $allContributors | Select-Object -First 1
-            $name = if ($firstOther.DisplayName) { $firstOther.DisplayName } else { "Kolega" }
+            $name = if ($firstOther.DisplayName) { $firstOther.DisplayName } else { $firstOther.SignInName }
             
             $res2Text  = "[OK] - $name (Bet Mantas Bartkevičius nerastas)"
             $res2Color = "Yellow" 
@@ -72,7 +74,8 @@ try {
     }
 
 } catch {
-    $res2Text  = "[KLAIDA] - Nepavyko nuskaityti teisių."
+    # Jei komanda lūžta, dabar studentas matys tikslią Azure klaidą
+    $res2Text  = "[KLAIDA] - Nepavyko nuskaityti teisių: $($_.Exception.Message)"
     $res2Color = "Red"
 }
 
@@ -87,7 +90,6 @@ Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
 
-# Išvedame suformatuotas eilutes
 Write-Host "1. Prenumeratos pavadinimas: " -NoNewline
 Write-Host $res1Text -ForegroundColor $res1Color
 
