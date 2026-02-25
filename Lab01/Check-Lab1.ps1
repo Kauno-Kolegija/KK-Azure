@@ -12,7 +12,7 @@ $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno
 $GlobCfg = $Setup.GlobalConfig
 $LocCfg  = $Setup.LocalConfig
 
-# --- 3. TYLUS TIKRINIMAS (Prioritetas Mantui) ---
+# --- 3. TYLUS TIKRINIMAS (Atsparus klaidoms) ---
 
 # A. Prenumeratos tikrinimas
 $context = Get-AzContext
@@ -29,52 +29,54 @@ if ($isNameCorrect) {
 
 # B. Dėstytojo teisių tikrinimas
 try {
-    # PAKEITIMAS: Pašalintas nulūžtantis '-IncludeClassicAdministrators' parametras.
-    # Pridėtas konkretus Scope, kad išvengtume kitų Azure klaidų.
-    # Pakeista į '-ErrorAction Stop', kad matytume tikrą klaidą, jei tokia būtų.
-    $subId = $context.Subscription.Id
-    $assignments = Get-AzRoleAssignment -Scope "/subscriptions/$subId" -ErrorAction Stop
-    
     $currentUser = $context.Account.Id
     
-    # Atsifiltruojame visus CONTRIBUTOR, kurie nėra pats studentas
-    $allContributors = $assignments | Where-Object { 
-        $_.RoleDefinitionName -eq "Contributor" -and 
-        $_.SignInName -ne $currentUser
+    # Paimame VISUS priskyrimus be jokių ribojančių scope parametrų
+    $assignments = Get-AzRoleAssignment -ErrorAction SilentlyContinue
+
+    # Filtruojame naudodami foreach (veikia stabiliau nei Where-Object su tuščiais Azure laukais)
+    $allContributors = @()
+    if ($assignments) {
+        foreach ($a in $assignments) {
+            if ($a.RoleDefinitionName -match "Contributor" -and $a.SignInName -ne $currentUser) {
+                $allContributors += $a
+            }
+        }
     }
 
-    if ($allContributors) {
-        $totalCount = @($allContributors).Count
+    if ($allContributors.Count -gt 0) {
+        $totalCount = $allContributors.Count
 
-        # Ieškome Manto pagal Vardą ir Pavardę arba el. paštą
-        $mantas = $allContributors | Where-Object { 
-            ($_.DisplayName -match "Mantas" -and $_.DisplayName -match "Bartkevičius") -or
-            $_.SignInName -match "Mantas.Bartkevicius"
-        } | Select-Object -First 1
+        # Ieškome Manto
+        $mantas = $null
+        foreach ($c in $allContributors) {
+            if (($c.DisplayName -match "Mantas" -and $c.DisplayName -match "Bartkevičius") -or ($c.SignInName -match "Mantas.Bartkevicius")) {
+                $mantas = $c
+                break
+            }
+        }
 
         if ($mantas) {
             $others = $totalCount - 1
             $suffix = if ($others -gt 0) { " (+ $others kiti)" } else { "" }
             
-            # Jei Azure neduoda DisplayName, naudojame SignInName
-            $dispName = if ($mantas.DisplayName) { $mantas.DisplayName } else { $mantas.SignInName }
+            $dispName = if ($mantas.DisplayName) { $mantas.DisplayName } elseif ($mantas.SignInName) { $mantas.SignInName } else { "Dėstytojas" }
             
             $res2Text  = "[OK] - ${dispName}${suffix}"
             $res2Color = "Green"
         } else {
-            $firstOther = $allContributors | Select-Object -First 1
-            $name = if ($firstOther.DisplayName) { $firstOther.DisplayName } else { $firstOther.SignInName }
+            $firstOther = $allContributors[0]
+            $name = if ($firstOther.DisplayName) { $firstOther.DisplayName } elseif ($firstOther.SignInName) { $firstOther.SignInName } else { "Kolega" }
             
             $res2Text  = "[OK] - $name (Bet Mantas Bartkevičius nerastas)"
             $res2Color = "Yellow" 
         }
     } else {
-        $res2Text  = "[KLAIDA] - Nerasta jokių vartotojų su 'Contributor' role (išskyrus jus)"
+        $res2Text  = "[KLAIDA] - Nerasta jokių vartotojų su 'Contributor' role (išskyrus jus). Jei ką tik pridėjote, palaukite 5-10 min!"
         $res2Color = "Red"
     }
 
 } catch {
-    # Jei komanda lūžta, dabar studentas matys tikslią Azure klaidą
     $res2Text  = "[KLAIDA] - Nepavyko nuskaityti teisių: $($_.Exception.Message)"
     $res2Color = "Red"
 }
