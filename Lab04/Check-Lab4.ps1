@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 04: Defense in Depth (Platinum - Full Topology)"
+$ScriptVersion = "LAB 04: Defense in Depth (Platinum - Full Topology - Multi-Language)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -29,8 +29,8 @@ if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 # --- 3. DUOMENŲ RINKIMAS ---
 $resourceResults = @()
 
-# A. Resursų Grupės
-$labRGs = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB0[45]" }
+# A. Resursų Grupės (Tikriname, ar yra bent 3 grupės su RG-LAB04)
+$labRGs = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB04" }
 if ($labRGs.Count -ge 3) {
     $rgText = "[OK] - Rastos 3+ grupės"
     $rgColor = "Green"
@@ -43,9 +43,12 @@ $resourceResults += [PSCustomObject]@{ Name = "Resursų grupės"; Text = $rgText
 # B. Tinklai ir Peering
 $allVnets = Get-AzVirtualNetwork
 $vnetAdmin = $allVnets | Where-Object Name -match "VNet-Admin" | Select-Object -First 1
-$vnetSandelys = $allVnets | Where-Object Name -match "VNet-Sandelys|VNet-Sandelis" | Select-Object -First 1
+
+# PRIDĖTA: VNet-Warehouse (EN) ir VNet-Sandelys/Sandelis (LT) palaikymas
+$vnetSandelys = $allVnets | Where-Object Name -match "VNet-Sandelys|VNet-Sandelis|VNet-Warehouse" | Select-Object -First 1
 
 if ($vnetAdmin -and $vnetSandelys) {
+    # Ieškome peering'o, kuris sujungia šiuos du tinklus
     $peering = $vnetAdmin.VirtualNetworkPeerings | Select-Object -First 1
     if ($peering -and $peering.PeeringState -eq "Connected") {
         $peerText = "[OK] - Connected (Sujungta)"
@@ -62,7 +65,7 @@ if ($vnetAdmin -and $vnetSandelys) {
 # --- GAVIMAS VISŲ VM ---
 $allVMs = Get-AzVM
 
-# C. Admin Serveris (Klientas) - NAUJA DALIS
+# C. Admin Serveris (Klientas)
 $vmAdmin = $allVMs | Where-Object Name -match "VM-Admin|Admin-VM" | Select-Object -First 1
 
 if ($vmAdmin) {
@@ -85,7 +88,8 @@ if ($vmAdmin) {
 $resourceResults += [PSCustomObject]@{ Name = "Admin Serveris"; Text = $adminText; Color = $adminColor }
 
 # D. Sandėlio Serveris (Taikinys)
-$vmSandelys = $allVMs | Where-Object Name -match "VM-Sandelis|Sand-VM|Sandelis-VM" | Select-Object -First 1
+# PRIDĖTA: VM-Warehouse (EN) ir VM-Sandelis (LT) palaikymas
+$vmSandelys = $allVMs | Where-Object Name -match "VM-Sandelis|Sand-VM|Sandelis-VM|VM-Warehouse|Warehouse-VM" | Select-Object -First 1
 
 if ($vmSandelys) {
     $nicId = $vmSandelys.NetworkProfile.NetworkInterfaces[0].Id
@@ -108,12 +112,14 @@ if ($vmSandelys) {
         
         $denyRule = $vmNsg.SecurityRules | Where-Object { 
             ($_.Access -eq "Deny") -and 
-            (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80")) 
+            (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80") -or ($_.DestinationPortRange -contains "*")) 
         }
         
         if ($denyRule) {
-            if ($denyRule.Priority -le 1000) {
-                $vmSecText = "[OK] - DENY taisyklė (Port $($denyRule.DestinationPortRange), Prio: $($denyRule.Priority))"
+            # Jei yra kelios taisyklės, paimame pirmą
+            $rule = $denyRule[0]
+            if ($rule.Priority -le 1000) {
+                $vmSecText = "[OK] - DENY taisyklė (Port $($rule.DestinationPortRange), Prio: $($rule.Priority))"
                 $vmSecColor = "Green"
             } else {
                 $vmSecText = "[ĮSPĖJIMAS] - DENY prioritetas per žemas!"
@@ -143,11 +149,12 @@ if ($vnetSandelys) {
         
         $allowRule = $subNsg.SecurityRules | Where-Object { 
             ($_.Access -eq "Allow") -and 
-            (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80")) 
+            (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80") -or ($_.DestinationPortRange -contains "*")) 
         }
         
         if ($allowRule) {
-            $netSecText = "[OK] - Subnet NSG leidžia Port $($allowRule.DestinationPortRange)"
+            $rule = $allowRule[0]
+            $netSecText = "[OK] - Subnet NSG leidžia Port $($rule.DestinationPortRange)"
             $netSecColor = "Green"
         } else {
             $netSecText = "[KLAIDA] - Subnet NSG neturi Allow taisyklės"
@@ -158,6 +165,8 @@ if ($vnetSandelys) {
         $netSecColor = "Red"
     }
     $resourceResults += [PSCustomObject]@{ Name = "Saugumas (Tinklo Siena)"; Text = $netSecText; Color = $netSecColor }
+} else {
+    $resourceResults += [PSCustomObject]@{ Name = "Saugumas (Tinklo Siena)"; Text = "[KLAIDA] - Nerastas Sandėlio tinklas"; Color = "Red" }
 }
 
 # --- 4. IŠVEDIMAS ---
