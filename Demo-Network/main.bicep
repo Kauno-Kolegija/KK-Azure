@@ -1,7 +1,7 @@
 targetScope = 'subscription'
 
 param location string = 'swedencentral'
-param rgName string = 'RG-Tinklas-Bicep'
+param rgName string = 'RG-Tinklas-Demo'
 
 resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
   name: rgName
