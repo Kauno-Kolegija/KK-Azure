@@ -89,7 +89,7 @@ $resourceResults += [PSCustomObject]@{ Name = "Admin Serveris"; Text = $adminTex
 
 # D. Sandėlio Serveris (Taikinys)
 # PRIDĖTA: VM-Warehouse (EN) ir VM-Sandelis (LT) palaikymas
-$vmSandelys = $allVMs | Where-Object Name -match "VM-Sandelis|Sand-VM|Sandelis-VM|VM-Warehouse|Warehouse-VM" | Select-Object -First 1
+$vmSandelys = $allVMs | Where-Object Name -match "VM-Sand|VM-Sandelis|Sand-VM|Sandelis-VM|VM-Warehouse|Warehouse-VM" | Select-Object -First 1
 
 if ($vmSandelys) {
     $nicId = $vmSandelys.NetworkProfile.NetworkInterfaces[0].Id
