@@ -1,5 +1,5 @@
 # --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 8 TIKRINIMAS: Web Apps & Monitoring (Final)"
+$ScriptVersion = "LAB 8 TIKRINIMAS: Web Apps & Monitoring (Final v2)"
 Clear-Host
 Write-Host "--------------------------------------------------"
 Write-Host $ScriptVersion -ForegroundColor Magenta
@@ -24,11 +24,9 @@ $resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText;
 
 if ($labRG) {
     # B. App Service Plan (Planas ir Scale Out)
-    # Priverstinai atnaujiname plano informaciją, kad matytume naujausią serverių skaičių
     $appPlan = Get-AzAppServicePlan | Where-Object { $_.ResourceGroup -eq $labRG.ResourceGroupName } | Select-Object -First 1
     
     if ($appPlan) {
-        # Tikriname ar planas yra mokamas
         $tier = $appPlan.Sku.Tier
         if ($tier -ne "Free" -and $tier -ne "Shared") {
             $planStatus = "[OK] - Planas tinkamas ($tier - $($appPlan.Sku.Name))"
@@ -38,8 +36,6 @@ if ($labRG) {
             $planColor = "Red"
         }
 
-        # Tikriname Scale Out (Serverių skaičių)
-        # Naudojame Sku.Capacity, nes tai tiksliausias rodiklis
         $serverCount = $appPlan.Sku.Capacity
         if ($serverCount -ge 2) {
             $scaleStatus = "[OK] - Scale Out aktyvus (Serverių: $serverCount)"
@@ -66,15 +62,17 @@ if ($labRG) {
         $webText = "[OK] - Web App rasta ($($webApp.Name))"
         $webColor = "Green"
         
-        # Tikriname 'testavimo-aplinka' lizdą
+        # PATIKRA: Tikriname 'testavimo-aplinka' ARBA 'testing-env' lizdą
         $slots = Get-AzWebAppSlot -ResourceGroupName $labRG.ResourceGroupName -Name $webApp.Name
-        $targetSlot = $slots | Where-Object { $_.Name -match "testavimo-aplinka" }
+        $targetSlot = $slots | Where-Object { $_.Name -match "testavimo-aplinka|testing-env" }
 
         if ($targetSlot) {
-            $slotText = "[OK] - Rastas lizdas 'testavimo-aplinka'"
+            # Paimame rasto lizdo pavadinimą atvaizdavimui
+            $foundSlotName = ($targetSlot | Select-Object -First 1).Name
+            $slotText = "[OK] - Rastas lizdas ($foundSlotName)"
             $slotColor = "Green"
         } else {
-            $slotText = "[TRŪKSTA] - Nerastas Deployment Slot 'testavimo-aplinka'"
+            $slotText = "[TRŪKSTA] - Nerastas Deployment Slot ('testavimo-aplinka' arba 'testing-env')"
             $slotColor = "Red"
         }
     } else {
@@ -113,7 +111,6 @@ Write-Host "==================================================" -ForegroundColor
 
 foreach ($res in $resourceResults) {
     $label = "$($res.Name):"
-    # Lygiavimas
     $targetWidth = 25
     $neededSpaces = $targetWidth - $label.Length
     if ($neededSpaces -lt 1) { $neededSpaces = 1 }

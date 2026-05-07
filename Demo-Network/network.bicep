@@ -148,9 +148,6 @@ resource nicWeb 'Microsoft.Network/networkInterfaces@2023-09-01' = [for i in ran
         properties: {
           subnet: { id: vnet.properties.subnets[0].id }
           applicationSecurityGroups: [ { id: asgWeb.id } ]
-          
-          // ČIA YRA MAGIJA: Priskiriame Backend Pool'ui tik jei indeksas 'i' yra 1 arba 2.
-          // Jei 'i' yra 3 arba 4, priskiriame tuščią masyvą [].
           loadBalancerBackendAddressPools: i <= 2 ? [
             {
               id: loadBalancer.properties.backendAddressPools[0].id
