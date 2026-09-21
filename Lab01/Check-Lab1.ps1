@@ -164,7 +164,7 @@ Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
 
-Write-Host "1. Studento paskyra:         " -NoNewline
+Write-Host "1. Paskyra:         " -NoNewline
 Write-Host $res0Text -ForegroundColor $res0Color
 
 Write-Host "2. Prenumeratos pavadinimas: " -NoNewline
