@@ -16,9 +16,7 @@ $LocCfg  = $Setup.LocalConfig
 # A. Studento paskyros domeno tikrinimas
 #-----------------------------------------
 try {
-    $studentEmail = $lab.StudentEmail
-
-    if ($studentEmail -match '(?i)@itm\.kaunokolegija\.lt$') {
+    if ($studentEmail -match '(?i)^[^@\s]+@itm\.kaunokolegija\.lt$') {
         $res0Text  = "[OK] - $studentEmail"
         $res0Color = "Green"
     }
@@ -28,8 +26,8 @@ try {
     }
 }
 catch {
-    $res4Text  = "[KLAIDA] - Nepavyko nustatyti prisijungusios paskyros"
-    $res4Color = "Red"
+    $res0Text  = "[KLAIDA] - Nepavyko nustatyti prisijungusios paskyros"
+    $res0Color = "Red"
 }
 
 
@@ -165,7 +163,7 @@ Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
 
 Write-Host "1. Studento paskyra:         " -NoNewline
-Write-Host $res4Text -ForegroundColor $res4Color
+Write-Host $res0Text -ForegroundColor $res0Color
 
 Write-Host "2. Prenumeratos pavadinimas: " -NoNewline
 Write-Host $res1Text -ForegroundColor $res1Color
