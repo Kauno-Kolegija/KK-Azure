@@ -83,15 +83,24 @@ try {
 
 # C. Budget tikrinimas
 try {
-    #$subscriptionId = $context.Subscription.Id
+    $subscriptionId = (Get-AzContext).Subscription.Id
 
-    $budgets = Get-AzConsumptionBudget `
-        -ResourceGroupName $null `
+    $uri = "/subscriptions/$subscriptionId/providers/Microsoft.Consumption/budgets?api-version=2024-08-01"
+
+    $response = Invoke-AzRestMethod `
+        -Method GET `
+        -Path $uri `
         -ErrorAction Stop
 
-    if ($budgets -and $budgets.Count -gt 0) {
-        $budgetNames = ($budgets | Select-Object -ExpandProperty Name) -join ", "
-        $res3Text  = "[OK] - Sukurtas Budget: $budgetNames"
+    $budgetData = $response.Content | ConvertFrom-Json
+
+    if ($budgetData.value.Count -gt 0) {
+
+        $budgetNames = ($budgetData.value | ForEach-Object {
+            $_.name
+        }) -join ", "
+
+        $res3Text  = "[OK] - Rastas Budget: $budgetNames"
         $res3Color = "Green"
     }
     else {
