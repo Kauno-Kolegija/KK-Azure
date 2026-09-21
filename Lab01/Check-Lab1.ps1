@@ -16,15 +16,15 @@ $LocCfg  = $Setup.LocalConfig
 # A. Studento paskyros domeno tikrinimas
 #-----------------------------------------
 try {
-    $studentAccount = (Get-AzContext).Account.Id
+    $studentEmail = $lab.StudentEmail
 
-    if ($studentAccount -match '@itm\.kaunokolegija\.lt$') {
-        $res4Text  = "[OK] - $studentAccount"
-        $res4Color = "Green"
+    if ($studentEmail -match '(?i)@itm\.kaunokolegija\.lt$') {
+        $res0Text  = "[OK] - $studentEmail"
+        $res0Color = "Green"
     }
     else {
-        $res4Text  = "[KLAIDA] - Naudokite @itm.kaunokolegija.lt paskyrą: $studentAccount"
-        $res4Color = "Red"
+        $res0Text  = "[KLAIDA] - Naudokite @itm.kaunokolegija.lt paskyrą: $studentEmail"
+        $res0Color = "Red"
     }
 }
 catch {
