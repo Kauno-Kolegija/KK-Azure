@@ -17,6 +17,7 @@ $LocCfg  = $Setup.LocalConfig
 #-----------------------------------------
 try {
     # 1. Studento paskyros tikrinimas
+    $studentEmail = $Setup.StudentEmail
     if ($studentEmail -match '(?i)@itm\.kaunokolegija\.lt$') {
         $res0Text  = "[OK] - $studentEmail"
         $res0Color = "Green"
