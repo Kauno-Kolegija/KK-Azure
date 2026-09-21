@@ -12,9 +12,29 @@ $Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno
 $GlobCfg = $Setup.GlobalConfig
 $LocCfg  = $Setup.LocalConfig
 
-# --- 3. TYLUS TIKRINIMAS (Atsparus klaidoms) ---
 
-# A. Prenumeratos tikrinimas
+# A. Studento paskyros domeno tikrinimas
+#-----------------------------------------
+try {
+    $studentAccount = (Get-AzContext).Account.Id
+
+    if ($studentAccount -match '@itm\.kaunokolegija\.lt$') {
+        $res4Text  = "[OK] - $studentAccount"
+        $res4Color = "Green"
+    }
+    else {
+        $res4Text  = "[KLAIDA] - Naudokite @itm.kaunokolegija.lt paskyrą: $studentAccount"
+        $res4Color = "Red"
+    }
+}
+catch {
+    $res4Text  = "[KLAIDA] - Nepavyko nustatyti prisijungusios paskyros"
+    $res4Color = "Red"
+}
+
+
+# B. Prenumeratos tikrinimas
+#-----------------------------------------
 $context = Get-AzContext
 $subName = $context.Subscription.Name
 $isNameCorrect = $subName -match $LocCfg.NamingPattern
@@ -27,7 +47,8 @@ if ($isNameCorrect) {
     $res1Color = "Red"
 }
 
-# B. Dėstytojo teisių tikrinimas
+# C. Dėstytojo teisių tikrinimas
+#-----------------------------------------
 try {
     $currentUser = $context.Account.Id
     
@@ -81,26 +102,45 @@ try {
     $res2Color = "Red"
 }
 
-# C. Budget tikrinimas
+# D. Budget tikrinimas
+#-----------------------------------------
 try {
-    $subscriptionId = (Get-AzContext).Subscription.Id
-
-    $uri = "/subscriptions/$subscriptionId/providers/Microsoft.Consumption/budgets?api-version=2024-08-01"
-
-    $response = Invoke-AzRestMethod `
+    $accountsResponse = Invoke-AzRestMethod `
         -Method GET `
-        -Path $uri `
+        -Uri "https://management.azure.com/providers/Microsoft.Billing/billingAccounts?api-version=2024-04-01" `
         -ErrorAction Stop
 
-    $budgetData = $response.Content | ConvertFrom-Json
+    $accounts = ($accountsResponse.Content | ConvertFrom-Json).value
 
-    if ($budgetData.value.Count -gt 0) {
+    $foundBudgets = @()
 
-        $budgetNames = ($budgetData.value | ForEach-Object {
-            $_.name
-        }) -join ", "
+    foreach ($account in $accounts) {
 
-        $res3Text  = "[OK] - Rastas Budget: $budgetNames"
+        $budgetUri = "https://management.azure.com/providers/Microsoft.Billing/billingAccounts/$($account.name)/providers/Microsoft.Consumption/budgets?api-version=2024-08-01"
+
+        try {
+            $budgetResponse = Invoke-AzRestMethod `
+                -Method GET `
+                -Uri $budgetUri `
+                -ErrorAction Stop
+
+            $budgets = ($budgetResponse.Content | ConvertFrom-Json).value
+
+            if ($budgets) {
+                $foundBudgets += $budgets
+            }
+        }
+        catch {
+            # Jei vieno billing account biudžetų patikrinti nepavyksta,
+            # pereiname prie kito.
+        }
+    }
+
+    if ($foundBudgets.Count -gt 0) {
+        $budgetNames = $foundBudgets |
+            ForEach-Object { $_.name }
+
+        $res3Text  = "[OK] - " + ($budgetNames -join ", ")
         $res3Color = "Green"
     }
     else {
@@ -124,13 +164,16 @@ Write-Host "Data: $date"
 Write-Host "Studentas: $($Setup.StudentEmail)"
 Write-Host "==================================================" -ForegroundColor Gray
 
-Write-Host "1. Prenumeratos pavadinimas: " -NoNewline
+Write-Host "1. Studento paskyra:         " -NoNewline
+Write-Host $res4Text -ForegroundColor $res4Color
+
+Write-Host "2. Prenumeratos pavadinimas: " -NoNewline
 Write-Host $res1Text -ForegroundColor $res1Color
 
-Write-Host "2. Dėstytojo prieiga:        " -NoNewline
+Write-Host "3. Dėstytojo prieiga:        " -NoNewline
 Write-Host $res2Text -ForegroundColor $res2Color
 
-Write-Host "3. Budget tikrinimas:        " -NoNewline
+Write-Host "4. Budget tikrinimas:        " -NoNewline
 Write-Host $res3Text -ForegroundColor $res3Color
 
 Write-Host "==================================================" -ForegroundColor Gray
