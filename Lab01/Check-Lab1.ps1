@@ -81,6 +81,29 @@ try {
     $res2Color = "Red"
 }
 
+# C. Budget tikrinimas
+try {
+    #$subscriptionId = $context.Subscription.Id
+
+    $budgets = Get-AzConsumptionBudget `
+        -ResourceGroupName $null `
+        -ErrorAction Stop
+
+    if ($budgets -and $budgets.Count -gt 0) {
+        $budgetNames = ($budgets | Select-Object -ExpandProperty Name) -join ", "
+        $res3Text  = "[OK] - Sukurtas Budget: $budgetNames"
+        $res3Color = "Green"
+    }
+    else {
+        $res3Text  = "[KLAIDA] - Budget nerastas"
+        $res3Color = "Red"
+    }
+}
+catch {
+    $res3Text  = "[KLAIDA] - Nepavyko patikrinti Budget: $($_.Exception.Message)"
+    $res3Color = "Red"
+}
+
 # --- 4. GALUTINIS REZULTATAS (Ataskaitai) ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
@@ -97,6 +120,9 @@ Write-Host $res1Text -ForegroundColor $res1Color
 
 Write-Host "2. Dėstytojo prieiga:        " -NoNewline
 Write-Host $res2Text -ForegroundColor $res2Color
+
+Write-Host "3. Budget tikrinimas:        " -NoNewline
+Write-Host $res3Text -ForegroundColor $res3Color
 
 Write-Host "==================================================" -ForegroundColor Gray
 Write-Host ""
