@@ -7,10 +7,14 @@ Write-Host "--------------------------------------------------"
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    } else {
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+    }
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų."
-    exit
+    throw
 }
 
 # --- 2. INICIJUOJAME DARBĄ (Skaitome JSON failą) ---
@@ -18,14 +22,14 @@ try {
 $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab06/Check-Lab6-config.json"
 
 try {
-    $Setup = Initialize-Lab -LocalConfigUrl $ConfigUrl
+    $Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl $ConfigUrl
     $LocCfg = $Setup.LocalConfig
 } catch {
     Write-Error "Nepavyko užkrauti konfigūracijos iš $ConfigUrl"
-    exit
+    throw
 }
 
-$CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
+$CurrentIdentity = $Setup.StudentEmail
 if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 
 $resourceResults = @()

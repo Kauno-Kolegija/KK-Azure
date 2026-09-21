@@ -1,13 +1,17 @@
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    } else {
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+    }
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų."
-    exit
+    throw
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
+$Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
 
 $GlobCfg = $Setup.GlobalConfig
 $LocCfg  = $Setup.LocalConfig
@@ -29,53 +33,14 @@ if ($isNameCorrect) {
 
 # B. Dėstytojo teisių tikrinimas
 try {
-    $currentUser = $context.Account.Id
-    
-    # Paimame VISUS priskyrimus be jokių ribojančių scope parametrų
-    $assignments = Get-AzRoleAssignment -ErrorAction SilentlyContinue
-
-    # Filtruojame naudodami foreach (veikia stabiliau nei Where-Object su tuščiais Azure laukais)
-    $allContributors = @()
-    if ($assignments) {
-        foreach ($a in $assignments) {
-            if ($a.RoleDefinitionName -match "Contributor" -and $a.SignInName -ne $currentUser) {
-                $allContributors += $a
-            }
-        }
-    }
-
-    if ($allContributors.Count -gt 0) {
-        $totalCount = $allContributors.Count
-
-        # Ieškome Manto
-        $mantas = $null
-        foreach ($c in $allContributors) {
-            if (($c.DisplayName -match "Mantas" -and $c.DisplayName -match "Bartkevičius") -or ($c.SignInName -match "Mantas.Bartkevicius")) {
-                $mantas = $c
-                break
-            }
-        }
-
-        if ($mantas) {
-            $others = $totalCount - 1
-            $suffix = if ($others -gt 0) { " (+ $others kiti)" } else { "" }
-            
-            $dispName = if ($mantas.DisplayName) { $mantas.DisplayName } elseif ($mantas.SignInName) { $mantas.SignInName } else { "Dėstytojas" }
-            
-            $res2Text  = "[OK] - ${dispName}${suffix}"
-            $res2Color = "Green"
-        } else {
-            $firstOther = $allContributors[0]
-            $name = if ($firstOther.DisplayName) { $firstOther.DisplayName } elseif ($firstOther.SignInName) { $firstOther.SignInName } else { "Kolega" }
-            
-            $res2Text  = "[OK] - $name (Bet Mantas Bartkevičius nerastas)"
-            $res2Color = "Yellow" 
-        }
+    $hasRole = Test-LabInstructorRole -Email $GlobCfg.InstructorEmail -RoleName $LocCfg.RoleToCheck -SubscriptionId $context.Subscription.Id
+    if ($hasRole) {
+        $res2Text = "[OK] - $($GlobCfg.InstructorEmail): $($LocCfg.RoleToCheck) prenumeratoje"
+        $res2Color = 'Green'
     } else {
-        $res2Text  = "[KLAIDA] - Nerasta jokių vartotojų su 'Contributor' role (išskyrus jus). Jei ką tik pridėjote, palaukite 5-10 min!"
-        $res2Color = "Red"
+        $res2Text = "[KLAIDA] - $($GlobCfg.InstructorEmail) neturi tiesioginės '$($LocCfg.RoleToCheck)' rolės prenumeratoje"
+        $res2Color = 'Red'
     }
-
 } catch {
     $res2Text  = "[KLAIDA] - Nepavyko nuskaityti teisių: $($_.Exception.Message)"
     $res2Color = "Red"

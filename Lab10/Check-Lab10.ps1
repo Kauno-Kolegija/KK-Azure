@@ -1,10 +1,15 @@
 # --- LANKYTOJŲ SEKLIO AUTOMATINIS TESTAVIMAS (v7 - App Type Fix) ---
-$ErrorActionPreference = "SilentlyContinue"
+if ($PSScriptRoot) {
+    . (Join-Path $PSScriptRoot '../configs/common.ps1')
+} else {
+    Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+}
 
 # 1. Konfigūracija
 $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab10/Check-Lab10-config.json"
 try {
-    $Config = Invoke-RestMethod -Uri $ConfigUrl -ErrorAction Stop
+    $Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl $ConfigUrl
+    $Config = $Setup.LocalConfig
     Write-Host "`n--- PRADEDAMA PATIKRA: $($Config.LabName) ---`n" -ForegroundColor Cyan
 } catch { Write-Host " [KRITINĖ KLAIDA] Nepavyko atsisiųsti Config failo." -ForegroundColor Red; return }
 
@@ -21,11 +26,11 @@ if ($plan) {
     } else {
         Write-Host " [WARN] App Planas brangus! Pasirinkta: $($plan.Sku.Tier). Rekomenduojama F1/B1." -ForegroundColor Yellow
     }
-}
+} else { Write-Host ' [FAIL] App Service planas nerastas.' -ForegroundColor Red }
 
 # 4. Web App (PATAISYMAS: Atmetame Function Apps)
 # Ieškome tikros Web App, ignoruodami "functionapp" tipą
-$webApp = Get-AzWebApp -ResourceGroupName $rg.ResourceGroupName | Where-Object { $_.Kind -ne "functionapp" } | Select-Object -First 1
+$webApp = Get-AzWebApp -ResourceGroupName $rg.ResourceGroupName | Where-Object { $_.Kind -notlike "*functionapp*" } | Select-Object -First 1
 
 if ($webApp) {
     Write-Host " [OK] Web App rasta: $($webApp.Name)" -ForegroundColor Green
@@ -36,12 +41,12 @@ if ($webApp) {
 
     if ($logMount) {
          Write-Host " [OK] Storage prijungtas teisingai: /mounts/logs" -ForegroundColor Green
-    } 
+    } else { Write-Host ' [FAIL] Nerastas /mounts/logs Storage prijungimas.' -ForegroundColor Red }
 
     # Health Check
     $url = "https://$($webApp.DefaultHostName)$($Config.WebApp.HealthEndpoint)"
     try {
-        $req = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+        $req = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
         if ($req.StatusCode -eq $Config.WebApp.ExpectedStatus) {
             Write-Host " [OK] Svetainė veikia (200 OK)" -ForegroundColor Green
         } else { Write-Host " [FAIL] Svetainė klaidų būsenoje: $($req.StatusCode)" -ForegroundColor Red }
@@ -66,7 +71,7 @@ if ($storage) {
             if ($count -gt 0) {
                 Write-Host " [OK] 🏆  Archyve rasta failų:" -ForegroundColor Green -NoNewline
                 Write-Host " $count" -ForegroundColor Yellow -NoNewline
-                Write-Host ". Robotas veikia!" -ForegroundColor Green
+                Write-Host '. Failų buvimas nepatvirtina automatinio perkėlimo.' -ForegroundColor Gray
             } else {
                 Write-Host " [INFO] Archyvas tuščias (0 failų)." -ForegroundColor Gray
             }
@@ -85,7 +90,7 @@ if ($func) {
         Write-Host " [INFO] PowerShell versija: $($func.SiteConfig.PowerShellVersion)" -ForegroundColor Gray
     }
 
-    if ($func.State -eq "Running") { Write-Host " [OK] Būsena: Running" -ForegroundColor Green }
+    if ($func.State -eq $Config.FunctionApp.RequiredState) { Write-Host " [OK] Būsena: $($func.State)" -ForegroundColor Green }
     else { Write-Host " [WARN] Būsena: $($func.State)" -ForegroundColor Yellow }
 } else { Write-Host " [FAIL] Function App nerasta!" -ForegroundColor Red }
 

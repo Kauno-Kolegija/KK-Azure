@@ -9,7 +9,8 @@ param (
     [Parameter(Mandatory=$true)]
     [string]$VMName,           
 
-    [string]$InstructorEmail = "Mantas.Bartkevicius@kaunokolegija.lt"
+    [string]$InstructorEmail = "Mantas.Bartkevicius@kaunokolegija.lt",
+    [switch]$StartVM
 )
 
 # Kintamieji
@@ -34,13 +35,21 @@ if (-not (Get-AzContext)) { Connect-AzAccount }
 
 # 1.1 Prenumerata & IAM
 try {
-    $Sub = Get-AzSubscription -SubscriptionName $SubscriptionName -ErrorAction Stop
-    Select-AzSubscription -Subscription $Sub | Out-Null
+    $subscriptions = @(Get-AzSubscription -SubscriptionName $SubscriptionName -ErrorAction Stop)
+    if ($subscriptions.Count -ne 1) { throw "Prenumeratos pavadinimas turi atitikti vieną prenumeratą." }
+    $Sub = $subscriptions[0]
+    Set-AzContext -SubscriptionId $Sub.Id -TenantId $Sub.TenantId -ErrorAction Stop | Out-Null
     Log-Result "Azure" "Prenumerata" "OK" "Rasta: $($Sub.Name)"
-} catch { Log-Result "Azure" "Prenumerata" "FAIL" "Nerasta" }
+} catch { Log-Result "Azure" "Prenumerata" "FAIL" "Nerasta arba nepavyko pasirinkti"; throw }
 
-$Role = Get-AzRoleAssignment -IncludeClassicAdministrators | Where-Object { $_.SignInName -eq $InstructorEmail -or $_.DisplayName -like "*Mantas Bartkevičius*" }
-if ($Role) { Log-Result "Azure" "IAM Prieiga" "OK" "Yra" } else { Log-Result "Azure" "IAM Prieiga" "FAIL" "Nera" }
+$scope = "/subscriptions/$($Sub.Id)"
+try {
+    $Role = @(Get-AzRoleAssignment -SignInName $InstructorEmail -Scope $scope -ErrorAction Stop | Where-Object {
+        $_.RoleDefinitionName -eq 'Contributor' -and $_.Scope.TrimEnd('/') -eq $scope
+    })
+    if ($Role.Count -gt 0) { Log-Result 'Azure' 'IAM Prieiga' 'OK' 'Contributor prenumeratoje' }
+    else { Log-Result 'Azure' 'IAM Prieiga' 'FAIL' 'Nerasta tiesioginė Contributor rolė prenumeratoje' }
+} catch { Log-Result 'Azure' 'IAM Prieiga' 'FAIL' "Nepavyko patikrinti: $($_.Exception.Message)" }
 
 # 1.2 RG & Tags
 $RG = Get-AzResourceGroup -Name $ResourceGroup -ErrorAction SilentlyContinue
@@ -56,145 +65,91 @@ if ($RG) {
 $VM = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName -ErrorAction SilentlyContinue
 if ($VM) {
     Log-Result "Azure" "VM Serveris" "OK" "Rastas"
-    $DataDisk = $VM.StorageProfile.DataDisks | Where-Object { $_.Name -like "*Data*" -or $_.Name -like "*$VMName*" } 
-    if ($DataDisk) {
-        $RealDisk = Get-AzDisk -ResourceGroupName $ResourceGroup -DiskName $DataDisk.Name
-        if ($RealDisk.DiskSizeGB -ge 128) { Log-Result "Azure" "HDD Dydis" "OK" "$($RealDisk.DiskSizeGB) GB" } else { Log-Result "Azure" "HDD Dydis" "FAIL" "$($RealDisk.DiskSizeGB) GB" }
-    } else { Log-Result "Azure" "HDD Dydis" "FAIL" "Nera" }
+    $DataDisks = @($VM.StorageProfile.DataDisks)
+    $validDisks = @($DataDisks | Where-Object { $_.DiskSizeGB -ge 128 })
+    if ($validDisks.Count -gt 0) { Log-Result 'Azure' 'HDD Dydis' 'OK' 'Rastas bent 128 GiB duomenų diskas' }
+    else { Log-Result 'Azure' 'HDD Dydis' 'FAIL' 'Nerastas bent 128 GiB duomenų diskas' }
 } else { Log-Result "Azure" "VM Serveris" "FAIL" "Nerastas"; return }
 
 # --- 2. WINDOWS TIKRINIMAS ---
 Write-Host "`n--- START: WINDOWS INTERNAL CHECKS ---" -ForegroundColor Cyan
 
-$VMStatus = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName -Status
-if ($VMStatus.Statuses[1].Code -ne "PowerState/running") {
-    Write-Host "Ijungiamas serveris... (Laukite ~2 min)" -ForegroundColor Yellow
-    Start-AzVM -ResourceGroupName $ResourceGroup -Name $VMName -NoWait
-    do { Start-Sleep -Seconds 10; Write-Host "." -NoNewline -ForegroundColor Gray; $S = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName -Status } while ($S.Statuses[1].Code -ne "PowerState/running")
-    Write-Host "`nServeris veikia. Laukiama agento (90 sek)..." -ForegroundColor Green
-    Start-Sleep -Seconds 90
-} else { Write-Host "Serveris veikia. Laukiama (10 sek)..."; Start-Sleep -Seconds 10 }
-
-$TempScriptPath = "$env:TEMP\FixedCheck_$($VMName).ps1"
-
-# --- SERVERIO VIDAUS KODAS ---
-# PATAISYMAS: Naudojame `$($safeName), kad PowerShell nesuklystų dėl dvitaškio
-$ScriptContent = @"
-`$Res = @()
-
-# 1. Vartotojai
-if (Get-LocalUser -Name "Rezultatai" -ErrorAction SilentlyContinue) { `$Res += "User_Rezultatai:OK" } else { `$Res += "User_Rezultatai:FAIL" }
-if (Get-LocalGroupMember -Group "Administrators" | Where-Object {`$_.Name -like "*Rezultatai*"}) { `$Res += "User_Admin:OK" } else { `$Res += "User_Admin:FAIL" }
-
-# 2. F: Diskas
-if (Test-Path "F:\") {
-    `$Vol = Get-Volume -DriveLetter F
-    if (`$Vol.FileSystemLabel -eq "Data") { `$Res += "Disk_Label:OK" } else { `$Res += "Disk_Label:FAIL" }
-
-    # 3. Ieskome failu
-    `$files = Get-ChildItem -Path "F:\" -Filter "*.txt" -Recurse -ErrorAction SilentlyContinue
-    
-    if (`$files) {
-        foreach (`$f in `$files) {
-            
-            # A. Dumpfile
-            if (`$f.Name -like "dumpfile.txt") {
-                `$Res += "FOUND_DUMPFILE:OK"
-            } 
-            # B. info*.txt
-            elseif (`$f.Name -like "info*.txt") {
-                `$Res += "FOUND_TXT_`$(`$f.Name):OK"
+$VMStatus = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName -Status -ErrorAction Stop
+$powerState = ($VMStatus.Statuses | Where-Object Code -like 'PowerState/*' | Select-Object -First 1).Code
+if ($powerState -ne 'PowerState/running') {
+    if (-not $StartVM) { throw 'VM išjungta. Įjunkite ją arba nurodykite -StartVM (po patikros VM liks įjungta).' }
+    Start-AzVM -ResourceGroupName $ResourceGroup -Name $VMName -NoWait -ErrorAction Stop | Out-Null
+    $deadline = (Get-Date).AddMinutes(5)
+    do {
+        if ((Get-Date) -ge $deadline) { throw 'VM neįsijungė per 5 minutes.' }
+        Start-Sleep -Seconds 10
+        $status = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName -Status -ErrorAction Stop
+        $powerState = ($status.Statuses | Where-Object Code -like 'PowerState/*' | Select-Object -First 1).Code
+    } while ($powerState -ne 'PowerState/running')
+}
+$TempScriptPath = Join-Path ([IO.Path]::GetTempPath()) ('ExamCheck-' + [guid]::NewGuid().ToString('N') + '.ps1')
+$ScriptContent = @'
+$checks = [ordered]@{ User_Rezultatai = 'FAIL'; User_Admin = 'FAIL'; Disk_F = 'FAIL'; Disk_Label = 'FAIL'; FOUND_DUMPFILE = 'FAIL'; FOUND_INFO = 'FAIL' }
+$contents = @()
+$user = Get-LocalUser -Name 'Rezultatai' -ErrorAction SilentlyContinue
+if ($user) {
+    $checks.User_Rezultatai = 'OK'
+    $members = @(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue)
+    if ($members | Where-Object { $_.SID -eq $user.SID }) { $checks.User_Admin = 'OK' }
+}
+if (Test-Path 'F:\') {
+    $checks.Disk_F = 'OK'
+    $volume = Get-Volume -DriveLetter F -ErrorAction SilentlyContinue
+    if ($volume.FileSystemLabel -eq 'Data') { $checks.Disk_Label = 'OK' }
+    $files = @(Get-ChildItem -LiteralPath 'F:\' -Filter '*.txt' -File -Recurse -ErrorAction SilentlyContinue)
+    if ($files | Where-Object Name -eq 'dumpfile.txt') { $checks.FOUND_DUMPFILE = 'OK' }
+    $infoFiles = @($files | Where-Object Name -like 'info*.txt')
+    if ($infoFiles.Count -gt 0) {
+        $checks.FOUND_INFO = 'OK'
+        # Run Command atsakymas ribotas: grąžiname iki dviejų failų ištraukas.
+        foreach ($file in ($infoFiles | Select-Object -First 2)) {
+            try {
+                $reader = [IO.File]::OpenText($file.FullName)
                 try {
-                    `$bytes = [System.IO.File]::ReadAllBytes(`$f.FullName)
-                    `$b64 = [Convert]::ToBase64String(`$bytes)
-                    `$safeName = `$f.Name -replace '[^a-zA-Z0-9]', ''
-                    
-                    # --- ČIA BUVO KLAIDA, PATAISYTA SU SKLIAUSTAIS ---
-                    `$Res += "CONTENT_`$(`$safeName):`$b64"
-                } catch {
-                   `$Res += "CONTENT_ERROR:Failas nenuskaitytas"
-                }
-            }
+                    $buffer = New-Object char[] 128
+                    $length = $reader.Read($buffer, 0, $buffer.Length)
+                    $preview = ''
+                    if ($length -gt 0) { $preview = -join $buffer[0..($length - 1)] }
+                    $truncated = -not $reader.EndOfStream
+                } finally { $reader.Dispose() }
+                $contents += @{ Name = $file.Name; Preview = $preview; Truncated = $truncated }
+            } catch { $checks.FOUND_INFO = 'FAIL' }
         }
-    } else {
-         `$Res += "SEARCH_TXT:FAIL_NerastaJokiuFailu"
     }
-} else {
-    `$Res += "Disk_F:FAIL_Nerastas"
 }
-
-Write-Output (`$Res -join ";")
-"@
-
-Set-Content -Path $TempScriptPath -Value $ScriptContent -Encoding ASCII
-
+$result = @{ Checks = $checks; Files = $contents } | ConvertTo-Json -Depth 5 -Compress
+Write-Output ('EXAM_JSON:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($result)))
+'@
+$expectedChecks = @('User_Rezultatai', 'User_Admin', 'Disk_F', 'Disk_Label', 'FOUND_DUMPFILE', 'FOUND_INFO')
+$internal = $null
 try {
-    Write-Host "Vykdomas kodas serveryje..." -ForegroundColor Cyan
-    $Run = Invoke-AzVMRunCommand -ResourceGroupName $ResourceGroup -Name $VMName -CommandId 'RunPowerShellScript' -ScriptPath $TempScriptPath -ErrorAction Stop
-    
-    # --- PROTINGAS REZULTATO VALYMAS ---
-    $StringOutput = ""
-    if ($Run.Value -and $Run.Value.Message) { $StringOutput = $Run.Value.Message }
-    elseif ($Run.Value -and $Run.Value.Value) { $StringOutput = $Run.Value.Value }
-    elseif ($Run.Message) { $StringOutput = $Run.Message }
-    elseif ($Run.Output) { $StringOutput = $Run.Output }
-    elseif ($Run -is [string]) { $StringOutput = $Run }
-    else { $StringOutput = $Run | Out-String }
-
-    if ([string]::IsNullOrWhiteSpace($StringOutput)) {
-        Log-Result "Windows" "Check" "FAIL" "Serveris negražino duomenų."
-    } else {
-        $InternalResults = $StringOutput -split ";"
-        foreach ($R in $InternalResults) {
-            # Išvalome tarpus
-            $R = $R.Trim()
-            if ([string]::IsNullOrEmpty($R)) { continue }
-
-            # --- FILTRAVIMAS ---
-            # Ignoruojame PowerShell klaidas "At C:\Packages..."
-            if ($R -notmatch "^(User_|Disk_|FOUND_|CONTENT_|SEARCH_)") {
-                continue
-            }
-
-            # Skeliame tik ties PIRMU dvitaškiu
-            $Parts = $R -split ":", 2
-            
-            # 1. Failų turinys
-            if ($Parts[0] -like "CONTENT_*") {
-                if ($Parts[1] -ne "Failas nenuskaitytas" -and $Parts[1] -ne "ErrorReadingFile") {
-                    try {
-                        $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Parts[1]))
-                        $fName = $Parts[0].Replace("CONTENT_", "")
-                        $global:FileContents.Add("--- TURINYS: $fName ---`n$decoded`n") | Out-Null
-                    } catch {}
-                }
-            }
-            # 2. Standartiniai pranešimai
-            elseif ($Parts.Count -ge 2) {
-                $CheckName = $Parts[0]
-                $CheckStatus = $Parts[1]
-
-                if ($CheckName -eq "FOUND_DUMPFILE") { 
-                    Log-Result "Windows" "Failas: dumpfile" $CheckStatus "Rastas (Saugus)" 
-                }
-                elseif ($CheckName -like "FOUND_TXT_*") { 
-                    $realName = $CheckName.Replace("FOUND_TXT_", "")
-                    Log-Result "Windows" "Failas: $realName" $CheckStatus "Rastas ir nuskaitytas" 
-                }
-                else { 
-                    Log-Result "Windows" $CheckName $CheckStatus "Vidinis" 
-                }
-            }
-        }
-    }
-
+    Set-Content -LiteralPath $TempScriptPath -Value $ScriptContent -Encoding UTF8 -ErrorAction Stop
+    $run = Invoke-AzVMRunCommand -ResourceGroupName $ResourceGroup -Name $VMName -CommandId 'RunPowerShellScript' -ScriptPath $TempScriptPath -ErrorAction Stop
+    $output = @($run.Value | ForEach-Object { $_.Message }) -join "`n"
+    if ($output -notmatch 'EXAM_JSON:([A-Za-z0-9+/=]+)') { throw 'VM negrąžino patikros duomenų.' }
+    $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Matches[1]))
+    $internal = $json | ConvertFrom-Json -ErrorAction Stop
 } catch {
-    Log-Result "Windows" "Klaida" "FAIL" "Skripto klaida: $($_.Exception.Message)"
+    Write-Warning "Windows patikra nepavyko: $($_.Exception.Message)"
 } finally {
-    if (Test-Path $TempScriptPath) { Remove-Item $TempScriptPath -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $TempScriptPath) { Remove-Item -LiteralPath $TempScriptPath -Force }
 }
-
-Write-Host "Serveris paliekamas ijungtas..." -ForegroundColor Yellow
+# Vardiklis fiksuotas: dingę rezultatai ir nerasti failai visuomet FAIL.
+foreach ($check in $expectedChecks) {
+    $status = 'FAIL'
+    if ($internal -and $internal.Checks.$check -eq 'OK') { $status = 'OK' }
+    Log-Result 'Windows' $check $status 'VM patikra'
+}
+foreach ($file in $internal.Files) {
+    $suffix = if ($file.Truncated) { ' (ištrauka)' } else { '' }
+    $global:FileContents.Add("--- TURINYS: $($file.Name)$suffix ---`n$($file.Preview)`n") | Out-Null
+}
+Write-Host 'VM būsena po patikros nekeičiama.' -ForegroundColor Yellow
 
 # --- 3. REZULTATAI ---
 $AzScore = 0; if ($global:AzTotal -gt 0) { $AzScore = [math]::Round(($global:AzPass / $global:AzTotal) * 100, 0) }

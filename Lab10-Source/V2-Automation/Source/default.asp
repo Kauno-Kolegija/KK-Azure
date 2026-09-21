@@ -1,3 +1,32 @@
+<%@ Language=VBScript CodePage=65001 %>
+<%
+Response.CharSet = "UTF-8"
+Dim fso, logFile, logPath, fileName, clientIP, serverName, logError, pendingPath
+Set fso = Server.CreateObject("Scripting.FileSystemObject")
+serverName = Server.CreateObject("WScript.Network").ComputerName
+clientIP = Request.ServerVariables("REMOTE_ADDR")
+
+' CreateTextFile su overwrite=False neleidžia perrašyti jau esančio žurnalo.
+fileName = fso.GetTempName & ".txt"
+logPath = "C:\mounts\logs\" & fileName
+pendingPath = logPath & ".pending"
+On Error Resume Next
+Set logFile = fso.CreateTextFile(pendingPath, False)
+If Err.Number = 0 Then
+    logFile.WriteLine "timestamp=" & Now()
+    logFile.WriteLine "ip=" & clientIP
+    logFile.WriteLine "server=" & serverName
+    logFile.Close
+    If Err.Number = 0 Then fso.MoveFile pendingPath, logPath
+End If
+logError = Err.Number
+On Error GoTo 0
+If logError <> 0 Then
+    Response.Status = "500 Internal Server Error"
+    Response.Write "Nepavyko įrašyti apsilankymo žurnalo."
+    Response.End
+End If
+%>
 <html lang="lt">
 <head>
     <meta charset="UTF-8">

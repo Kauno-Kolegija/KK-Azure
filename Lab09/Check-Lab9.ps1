@@ -1,3 +1,10 @@
+if ($PSScriptRoot) {
+    . (Join-Path $PSScriptRoot '../configs/common.ps1')
+} else {
+    Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+}
+$Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab09/Check-Lab9-config.json'
+$LocCfg = $Setup.LocalConfig
 <#
 .SYNOPSIS
     LAB 09/10 Patikrinimo Scriptas (v6.0 - Compact)
@@ -10,7 +17,7 @@ Clear-Host
 Write-Host "--- $ScriptVersion ---" -ForegroundColor Cyan
 
 # --- 1. RESURSŲ GRUPĖ ---
-$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB09" } | Select-Object -First 1
+$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 if (-not $labRG) {
     Write-Host "[KLAIDA] Nerasta resursų grupė 'RG-LAB09...'" -ForegroundColor Red; exit
@@ -26,7 +33,8 @@ if ($acr) {
     
     try {
         # Gauname repozitorijas ir iškart spausdiname po registru
-        $reposRaw = az acr repository list --name $acr.Name --output tsv 2>$null
+        $reposRaw = az acr repository list --name $acr.Name --subscription (Get-AzContext).Subscription.Id --output tsv
+        if ($LASTEXITCODE -ne 0) { throw 'Azure CLI nepavyko nuskaityti ACR repozitorijų.' }
         $repos = $reposRaw -split "\s+" | Where-Object { $_ -ne "" }
         
         if ($repos) {
@@ -34,13 +42,13 @@ if ($acr) {
                  if ($repo -match "hello-world" -or $repo -match "aci-helloworld") {
                      Write-Host "     [+] $repo (Microsoft/Demo)" -ForegroundColor Yellow
                  } else {
-                     Write-Host "     [+] $repo (Jūsų sukurtas)" -ForegroundColor Green
+                     Write-Host "     [+] $repo (Kilmė netikrinta)" -ForegroundColor Gray
                  }
              }
         } else {
              Write-Host "     [INFO] Registras tuščias." -ForegroundColor Yellow
         }
-    } catch { }
+    } catch { Write-Host "[KLAIDA] $($_.Exception.Message)" -ForegroundColor Red }
 } else {
     Write-Host "[KLAIDA] Nerastas ACR" -ForegroundColor Red
 }
@@ -50,16 +58,25 @@ Write-Host "--- 2. Linux VM ir Portai ---" -ForegroundColor Cyan
 $vm = Get-AzVM -ResourceGroupName $labRG.ResourceGroupName -Name "DockerVM" -ErrorAction SilentlyContinue
 
 if ($vm) {
-    Write-Host "[OK] Virtuali mašina 'DockerVM' rasta." -ForegroundColor Green
-    $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $labRG.ResourceGroupName | Select-Object -First 1
-    if ($nsg) {
-        if ($nsg.SecurityRules | Where-Object { $_.DestinationPortRange -contains "80" -and $_.Access -eq "Allow" }) {
-            Write-Host "[OK] Portas 80 (Web) atidarytas." -ForegroundColor Green
-        } else { Write-Host "[TRŪKSTA] Portas 80 neatidarytas." -ForegroundColor Red }
-
-        if ($nsg.SecurityRules | Where-Object { $_.DestinationPortRange -contains "9000" -and $_.Access -eq "Allow" }) {
-            Write-Host "[OK] Portas 9000 (Portainer) atidarytas." -ForegroundColor Green
-        } else { Write-Host "[TRŪKSTA] Portas 9000 neatidarytas." -ForegroundColor Yellow }
+    if ($vm.StorageProfile.OsDisk.OsType -eq 'Linux') {
+        Write-Host "[OK] Linux virtuali mašina 'DockerVM' rasta." -ForegroundColor Green
+    } else { Write-Host '[KLAIDA] DockerVM operacinė sistema nėra Linux.' -ForegroundColor Red }
+    $nic = Get-AzNetworkInterface -ResourceId $vm.NetworkProfile.NetworkInterfaces[0].Id -ErrorAction Stop
+    $subnetParts = $nic.IpConfigurations[0].Subnet.Id -split '/'
+    $vnet = Get-AzVirtualNetwork -ResourceGroupName $subnetParts[4] -Name $subnetParts[8] -ErrorAction Stop
+    $subnet = $vnet.Subnets | Where-Object { $_.Id -eq $nic.IpConfigurations[0].Subnet.Id }
+    $nsgIds = @(@($nic.NetworkSecurityGroup.Id, $subnet.NetworkSecurityGroup.Id) | Where-Object { $_ } | Select-Object -Unique)
+    if ($nsgIds.Count -eq 0) { Write-Host '[TRŪKSTA] VM NIC ir potinkliui nepriskirta NSG.' -ForegroundColor Red }
+    foreach ($nsgId in $nsgIds) {
+        $parts = $nsgId -split '/'
+        $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $parts[4] -Name $parts[-1] -ErrorAction Stop
+        foreach ($port in @(80, 9000)) {
+            if (Get-LabNsgPortRule -Nsg $nsg -Port $port -Access Allow) {
+                Write-Host "[OK] $($nsg.Name): Inbound TCP Allow $port taisyklė (pasiekiamumas netikrintas)." -ForegroundColor Green
+            } else {
+                Write-Host "[DĖMESIO] $($nsg.Name): TCP $port Allow nepatvirtinta; tikrinkite taisykles ir prioritetus." -ForegroundColor Yellow
+            }
+        }
     }
 } else {
     Write-Host "[TRŪKSTA] Nerasta VM 'DockerVM'." -ForegroundColor Red
@@ -70,8 +87,8 @@ Write-Host "--- 3. Container Instance (Svetainė) ---" -ForegroundColor Cyan
 $aci = Get-AzContainerGroup -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
 
 if ($aci) {
-    if ($aci.ProvisioningState -eq "Succeeded" -or $aci.ProvisioningState -eq "Running") {
-         Write-Host "[OK] Konteinerių grupė veikia." -ForegroundColor Green
+    if ($aci.ProvisioningState -eq "Succeeded") {
+         Write-Host "[OK] Konteinerių grupė sukurta (programos veikimas netikrintas)." -ForegroundColor Green
          if ($aci.IpAddress.Fqdn) {
              Write-Host "     Adresas: http://$($aci.IpAddress.Fqdn)" -ForegroundColor Cyan
          }

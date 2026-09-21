@@ -1,7 +1,7 @@
 param location string
 param adminUsername string = 'LabAdmin'
 @secure()
-param adminPassword string = 'Pake1sk173-1-$augu-s1ap7a#0d!'
+param adminPassword string
 
 // 1. Aplikacijų saugos grupės (ASG)
 resource asgWeb 'Microsoft.Network/applicationSecurityGroups@2023-09-01' = {

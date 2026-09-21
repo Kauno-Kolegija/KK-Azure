@@ -1,19 +1,24 @@
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    } else {
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+    }
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
-    exit
+    throw
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/Check-Lab3-config.json"
+$Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/Check-Lab3-config.json"
 $LocCfg = $Setup.LocalConfig
+$context = Get-AzContext
 
 # --- 3. DUOMENŲ RINKIMAS ---
 
 # A. Randame Resursų grupę
-$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB03" } | Select-Object -First 1
+$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 if ($targetRG) {
     # Tikriname regioną (Turi būti Norway East pagal 30 punktą)
@@ -64,11 +69,12 @@ if ($targetRG) {
         }
 
         # Atskiras įrašas diskui
-        if ($diskCount -ge 1) {
-            $diskText = "[OK] - Rasta papildomų diskų: $diskCount (128 GiB)"
+        $matchingDisks = @($dataDisks | Where-Object { $_.DiskSizeGB -eq 128 })
+        if ($matchingDisks.Count -ge 1) {
+            $diskText = "[OK] - Rasta 128 GiB duomenų diskų: $($matchingDisks.Count)"
             $diskColor = "Green"
         } else {
-            $diskText = "[TRŪKSTA] - Nėra papildomo duomenų disko (Data Disk)"
+            $diskText = "[TRŪKSTA] - Nerastas 128 GiB duomenų diskas (diskų: $diskCount)"
             $diskColor = "Red"
         }
 
@@ -98,13 +104,15 @@ if ($targetRG) {
         Write-Host "   (Tikrinama funkcijų būsena...)" -ForegroundColor DarkGray
         
         try {
-            $cliOutput = az functionapp function list --resource-group $targetRG.ResourceGroupName --name $funcApp.Name --output json 2>$null | ConvertFrom-Json
+            $raw = az functionapp function list --resource-group $targetRG.ResourceGroupName --name $funcApp.Name --subscription $context.Subscription.Id --output json
+            if ($LASTEXITCODE -ne 0) { throw 'Azure CLI nepavyko nuskaityti funkcijų.' }
+            $cliOutput = $raw | ConvertFrom-Json -ErrorAction Stop
         } catch {
             $cliOutput = @()
         }
 
         # HTTP (-fun1)
-        $fun1 = $cliOutput | Where-Object { $_.name -like "*/$($Setup.LastName)-fun1" -or $_.name -like "*/*-fun1" } | Select-Object -First 1
+        $fun1 = $cliOutput | Where-Object { $_.name -like '*/*-fun1' -and 'httpTrigger' -in @($_.config.bindings.type) } | Select-Object -First 1
         
         if ($fun1) {
             $cleanName = $fun1.name.Split('/')[-1]
@@ -114,7 +122,7 @@ if ($targetRG) {
         }
 
         # Timer (-fun2)
-        $fun2 = $cliOutput | Where-Object { $_.name -like "*/$($Setup.LastName)-fun2" -or $_.name -like "*/*-fun2" } | Select-Object -First 1
+        $fun2 = $cliOutput | Where-Object { $_.name -like '*/*-fun2' -and 'timerTrigger' -in @($_.config.bindings.type) } | Select-Object -First 1
         
         if ($fun2) {
             $cleanName = $fun2.name.Split('/')[-1]

@@ -1,13 +1,17 @@
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    } else {
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+    }
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
-    exit
+    throw
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
+$Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
 $LocCfg = $Setup.LocalConfig
 
 # --- 3. DUOMENŲ RINKIMAS ---
@@ -38,7 +42,10 @@ if ($targetRG) {
     $allResources = Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName
     
     foreach ($req in $LocCfg.RequiredResources) {
-        $found = $allResources | Where-Object { $_.ResourceType -eq $req.Type } | Select-Object -First 1
+        $found = $allResources | Where-Object {
+            $_.ResourceType -eq $req.Type -and
+            ($req.Type -ne 'Microsoft.Web/sites' -or $_.Kind -notlike '*functionapp*')
+        } | Select-Object -First 1
         
         if ($found) {
             # --- FORMUOJAME PAPILDOMĄ INFO (Regionas, SKU) ---
@@ -54,11 +61,16 @@ if ($targetRG) {
             
             # Galutinis tekstas: [OK] - Vardas (Regionas) [SKU]
             $finalText = "[OK] - $($found.Name) ($region)$extraInfo"
+            $resultColor = 'Green'
+            if ($LocCfg.AllowedRegions -and $region -notin $LocCfg.AllowedRegions) {
+                $finalText = "[KLAIDA] - $($found.Name): regionas '$region' neleidžiamas"
+                $resultColor = 'Red'
+            }
             
             $resourceResults += [PSCustomObject]@{
                 Name  = $req.Name
                 Text  = $finalText
-                Color = "Green"
+                Color = $resultColor
             }
         } else {
             $resourceResults += [PSCustomObject]@{

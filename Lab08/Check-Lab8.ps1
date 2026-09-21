@@ -1,3 +1,10 @@
+if ($PSScriptRoot) {
+    . (Join-Path $PSScriptRoot '../configs/common.ps1')
+} else {
+    Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+}
+$Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab08/Check-Lab8-config.json'
+$LocCfg = $Setup.LocalConfig
 # --- VERSIJOS KONTROLĖ ---
 $ScriptVersion = "LAB 8 TIKRINIMAS: Web Apps & Monitoring (Final v2)"
 Clear-Host
@@ -10,7 +17,7 @@ Write-Host "--------------------------------------------------"
 $resourceResults = @()
 
 # Bandome gauti resursų grupę
-$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB08" } | Select-Object -First 1
+$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 # A. Resursų Grupė
 if ($labRG) {
@@ -28,7 +35,7 @@ if ($labRG) {
     
     if ($appPlan) {
         $tier = $appPlan.Sku.Tier
-        if ($tier -ne "Free" -and $tier -ne "Shared") {
+        if ($appPlan.Sku.Name -in @('S1', 'P0v3')) {
             $planStatus = "[OK] - Planas tinkamas ($tier - $($appPlan.Sku.Name))"
             $planColor = "Green"
         } else {
@@ -100,11 +107,11 @@ if ($labRG) {
 
 # --- 3. REZULTATŲ IŠVEDIMAS ---
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
-$user = az ad signed-in-user show --query userPrincipalName -o tsv
+$user = $Setup.StudentEmail
 
 Write-Host "`n--- GALUTINIS REZULTATAS ---" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Gray
-Write-Host "LAB 08: Azure Web Apps & Monitoring" -ForegroundColor Yellow
+Write-Host $LocCfg.LabName -ForegroundColor Yellow
 Write-Host "Data: $date"
 Write-Host "Studentas: $user"
 Write-Host "==================================================" -ForegroundColor Gray

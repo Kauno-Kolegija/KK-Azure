@@ -8,29 +8,33 @@ Write-Host "--------------------------------------------------"
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    } else {
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+    }
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų."
-    exit
+    throw
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
 $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab07/Check-Lab7-config.json"
 try {
-    $Setup = Initialize-Lab -LocalConfigUrl $ConfigUrl
+    $Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl $ConfigUrl
     $LocCfg = $Setup.LocalConfig
 } catch {
-    $LocCfg = @{ LabName = "Azure Databases" }
+    throw
 }
 
-$CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
+$CurrentIdentity = $Setup.StudentEmail
 if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 
 # --- 3. DUOMENŲ RINKIMAS ---
 $resourceResults = @()
 
 # A. Resursų Grupė
-$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
+$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 if ($labRG) {
     $rgName = $labRG.ResourceGroupName
@@ -61,22 +65,21 @@ if ($mainServer) {
         $dbText = "[OK] - SQL DB rasta ($($db.DatabaseName))"
         $dbColor = "Green"
         
-        # 1. Geo-Replikacija (Logika: Ar yra antras serveris?)
-        $repText = "[TRŪKSTA] - Nerasta Geo-Replikacija (Trūksta antro serverio)"
+        # 1. Tikriname pasirinktos duomenų bazės replikacijos ryšį ir būseną.
+        $repText = "[TRŪKSTA] - Nerasta aktyvi duomenų bazės Geo-Replikacija"
         $repColor = "Red"
         
-        # Jei turime bent 2 SQL serverius grupėje, vadinasi replikacija paruošta
-        if ($sqlServers.Count -ge 2) {
-             $repText = "[OK] - Geo-Replikacija aktyvi (Rasti 2 serveriai)"
-             $repColor = "Green"
-        } 
-        # Atsarginis variantas: jei serveris vienas, bet galbūt veikia tikra replikacija
-        elseif ($db) {
-             $allLinks = Get-AzResource -ResourceGroupName $rgName -ResourceType "Microsoft.Sql/servers/databases/replicationLinks" -ErrorAction SilentlyContinue
-             if ($allLinks) {
-                $repText = "[OK] - Geo-Replikacija aktyvi (Link Found)"
+        try {
+             $allLinks = @(Get-AzSqlDatabaseReplicationLink -ResourceGroupName $rgName -ServerName $mainServer.ServerName -DatabaseName $db.DatabaseName -ErrorAction Stop)
+             if ($allLinks | Where-Object { $_.ReplicationState -eq 'CATCH_UP' }) {
+                $repText = "[OK] - Geo-Replikacijos ryšys aktyvus (CATCH_UP)"
                 $repColor = "Green"
+             } elseif ($allLinks.Count -gt 0) {
+                $repText = "[DĖMESIO] - Replikacijos būsena: $($allLinks.ReplicationState -join ', ')"
+                $repColor = "Yellow"
              }
+        } catch {
+            $repText = "[KLAIDA] - Nepavyko patikrinti replikacijos: $($_.Exception.Message)"
         }
 
         # 2. Maskavimas (Data Masking)
@@ -112,6 +115,7 @@ $cosText = "[TRŪKSTA] - Nerasta Cosmos DB paskyra"
 $cosColor = "Red"
 $cosConText = "-"; $cosRegText = "-"
 $bestCosmosFound = $false
+$cosmosObj = $null
 
 if ($rgName) {
     # Gauname VISAS Cosmos DB paskyras grupėje

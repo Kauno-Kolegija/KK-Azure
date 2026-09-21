@@ -2,6 +2,8 @@ targetScope = 'subscription'
 
 param location string = 'swedencentral'
 param rgName string = 'RG-Tinklas-Demo'
+@secure()
+param adminPassword string
 
 resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
   name: rgName
@@ -17,5 +19,6 @@ module networking './network.bicep' = {
   scope: resourceGroup(rg.name)
   params: {
     location: location
+    adminPassword: adminPassword
   }
 }

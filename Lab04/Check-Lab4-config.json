@@ -1,6 +1,6 @@
 {
   "LabName": "LAB 4: Tinklo paslaugos (GUI)",
-  "ResourceGroupPattern": "RG-LAB05",
+  "ResourceGroupPattern": "RG-LAB04",
   "RequiredResources": [
     { "Type": "Microsoft.Network/virtualNetworks", "Name": "VNet-Admin" },
     { "Type": "Microsoft.Network/virtualNetworks", "Name": "VNet-Sandelys" },

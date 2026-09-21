@@ -8,25 +8,31 @@ Write-Host "--------------------------------------------------"
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    } else {
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+    }
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
-    exit
+    throw
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
-$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab05/Check-Lab5-config.json"
+$Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab05/Check-Lab5-config.json"
 $LocCfg = $Setup.LocalConfig
 
-$CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
+$CurrentIdentity = $Setup.StudentEmail
 if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 
 # --- 3. DUOMENŲ RINKIMAS ---
 
 # Ieškome grupės pagal JSON konfigūraciją
-$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Sort-Object LastModifiedTime -Descending | Select-Object -First 1
+$targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 $resourceResults = @()
+$lb = $null
+$subnet = $null
 
 # A. Resursų Grupė
 if ($targetRG) {
@@ -53,15 +59,19 @@ if ($targetRG) {
     # Tikriname Subnet (WebSubnet)
     if ($vnet) {
         $subnet = $vnet.Subnets | Where-Object { $_.Name -eq "WebSubnet" }
-        if ($subnet) {
+        if ($subnet -and '10.15.0.0/24' -in @($subnet.AddressPrefix)) {
             $resourceResults += [PSCustomObject]@{ Name = " - Potinklis (Subnet)"; Text = "[OK] - WebSubnet (10.15.0.0/24)"; Color = "Green" }
         } else {
-            $resourceResults += [PSCustomObject]@{ Name = " - Potinklis (Subnet)"; Text = "[TRŪKSTA] - Nerastas 'WebSubnet'"; Color = "Red" }
+            $resourceResults += [PSCustomObject]@{ Name = " - Potinklis (Subnet)"; Text = "[KLAIDA] - Reikia 'WebSubnet' su 10.15.0.0/24 prefiksu"; Color = "Red" }
         }
     }
 
     # C. Network Security Group (NSG)
-    $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $targetRG.ResourceGroupName | Select-Object -First 1
+    $nsg = $null
+    if ($subnet.NetworkSecurityGroup.Id) {
+        $parts = $subnet.NetworkSecurityGroup.Id -split '/'
+        $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $parts[4] -Name $parts[-1] -ErrorAction Stop
+    }
     if ($nsg) {
         $nsgText = "[OK] - $($nsg.Name)"
         $nsgColor = "Green"
@@ -73,17 +83,17 @@ if ($targetRG) {
 
     if ($nsg) {
         # Tikriname taisykles (Port 80 ir 3389)
-        $ruleWeb = $nsg.SecurityRules | Where-Object { $_.DestinationPortRange -contains "80" -and $_.Access -eq "Allow" }
-        $ruleRDP = $nsg.SecurityRules | Where-Object { $_.DestinationPortRange -contains "3389" -and $_.Access -eq "Allow" }
+        $ruleWeb = Get-LabNsgPortRule -Nsg $nsg -Port 80 -Access Allow
+        $ruleRDP = Get-LabNsgPortRule -Nsg $nsg -Port 3389 -Access Allow
         
         if ($ruleWeb) { 
-            $resourceResults += [PSCustomObject]@{ Name = " - Taisyklė: WEB"; Text = "[OK] - Port 80 atidarytas"; Color = "Green" }
+            $resourceResults += [PSCustomObject]@{ Name = " - Taisyklė: WEB"; Text = "[OK] - Subnet NSG: Inbound TCP Allow 80 (pasiekiamumas netikrintas)"; Color = "Green" }
         } else {
             $resourceResults += [PSCustomObject]@{ Name = " - Taisyklė: WEB"; Text = "[TRŪKSTA] - Nėra taisyklės prievadui 80"; Color = "Red" }
         }
         
         if ($ruleRDP) { 
-            $resourceResults += [PSCustomObject]@{ Name = " - Taisyklė: RDP"; Text = "[OK] - Port 3389 atidarytas"; Color = "Green" }
+            $resourceResults += [PSCustomObject]@{ Name = " - Taisyklė: RDP"; Text = "[OK] - Subnet NSG: Inbound TCP Allow 3389 (pasiekiamumas netikrintas)"; Color = "Green" }
         } else {
             $resourceResults += [PSCustomObject]@{ Name = " - Taisyklė: RDP"; Text = "[TRŪKSTA] - Nėra taisyklės prievadui 3389"; Color = "Yellow" }
         }
@@ -143,7 +153,7 @@ if ($targetRG) {
         $inAvSet = 0
         $tagged = 0
         foreach ($vm in $vms) {
-            if ($vm.AvailabilitySetReference) { $inAvSet++ }
+            if ($avSet -and $vm.AvailabilitySetReference.Id -eq $avSet.Id) { $inAvSet++ }
             # Tikriname ar yra bet kokie tagai
             if ($vm.Tags.Count -gt 0) { $tagged++ }
         }

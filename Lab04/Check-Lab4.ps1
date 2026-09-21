@@ -8,29 +8,33 @@ Write-Host "--------------------------------------------------"
 
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    } else {
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+    }
 } catch {
     Write-Error "Nepavyko užkrauti bazinių funkcijų."
-    exit
+    throw
 }
 
 # --- 2. INICIJUOJAME DARBĄ ---
 $ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json"
 try {
-    $Setup = Initialize-Lab -LocalConfigUrl $ConfigUrl
+    $Setup = Initialize-Lab -ConfigDirectory $PSScriptRoot -LocalConfigUrl $ConfigUrl
     $LocCfg = $Setup.LocalConfig
 } catch {
-    $LocCfg = @{ LabName = "Defense in Depth Lab" }
+    throw
 }
 
-$CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
+$CurrentIdentity = $Setup.StudentEmail
 if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
 
 # --- 3. DUOMENŲ RINKIMAS ---
 $resourceResults = @()
 
 # A. Resursų Grupės (Tikriname, ar yra bent 3 grupės su RG-LAB04)
-$labRGs = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB04" }
+$labRGs = @(Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern })
 if ($labRGs.Count -ge 3) {
     $rgText = "[OK] - Rastos 3+ grupės"
     $rgColor = "Green"
@@ -41,7 +45,7 @@ if ($labRGs.Count -ge 3) {
 $resourceResults += [PSCustomObject]@{ Name = "Resursų grupės"; Text = $rgText; Color = $rgColor }
 
 # B. Tinklai ir Peering
-$allVnets = Get-AzVirtualNetwork
+$allVnets = @($labRGs | ForEach-Object { Get-AzVirtualNetwork -ResourceGroupName $_.ResourceGroupName })
 $vnetAdmin = $allVnets | Where-Object Name -match "VNet-Admin" | Select-Object -First 1
 
 # PRIDĖTA: VNet-Warehouse (EN) ir VNet-Sandelys/Sandelis (LT) palaikymas
@@ -49,8 +53,9 @@ $vnetSandelys = $allVnets | Where-Object Name -match "VNet-Sandelys|VNet-Sandeli
 
 if ($vnetAdmin -and $vnetSandelys) {
     # Ieškome peering'o, kuris sujungia šiuos du tinklus
-    $peering = $vnetAdmin.VirtualNetworkPeerings | Select-Object -First 1
-    if ($peering -and $peering.PeeringState -eq "Connected") {
+    $peering = $vnetAdmin.VirtualNetworkPeerings | Where-Object { $_.RemoteVirtualNetwork.Id -eq $vnetSandelys.Id } | Select-Object -First 1
+    $reversePeering = $vnetSandelys.VirtualNetworkPeerings | Where-Object { $_.RemoteVirtualNetwork.Id -eq $vnetAdmin.Id } | Select-Object -First 1
+    if ($peering.PeeringState -eq 'Connected' -and $reversePeering.PeeringState -eq 'Connected') {
         $peerText = "[OK] - Connected (Sujungta)"
         $peerColor = "Green"
     } else {
@@ -63,7 +68,7 @@ if ($vnetAdmin -and $vnetSandelys) {
 }
 
 # --- GAVIMAS VISŲ VM ---
-$allVMs = Get-AzVM
+$allVMs = @($labRGs | ForEach-Object { Get-AzVM -ResourceGroupName $_.ResourceGroupName })
 
 # C. Admin Serveris (Klientas)
 $vmAdmin = $allVMs | Where-Object Name -match "VM-Admin|Admin-VM" | Select-Object -First 1
@@ -74,7 +79,7 @@ if ($vmAdmin) {
     $nic = Get-AzNetworkInterface -ResourceId $nicId
     $subnetId = $nic.IpConfigurations[0].Subnet.Id
     
-    if ($subnetId -match "VNet-Admin") {
+    if ($vnetAdmin -and $subnetId -like "$($vnetAdmin.Id)/subnets/*") {
         $adminText = "[OK] - Rastas ir prijungtas prie VNet-Admin"
         $adminColor = "Green"
     } else {
@@ -88,12 +93,14 @@ if ($vmAdmin) {
 $resourceResults += [PSCustomObject]@{ Name = "Admin Serveris"; Text = $adminText; Color = $adminColor }
 
 # D. Sandėlio Serveris (Taikinys)
+$warehouseSubnetId = $null
 # PRIDĖTA: VM-Warehouse (EN) ir VM-Sandelis (LT) palaikymas
 $vmSandelys = $allVMs | Where-Object Name -match "VM-Sand|VM-Sandelis|Sand-VM|Sandelis-VM|VM-Warehouse|Warehouse-VM" | Select-Object -First 1
 
 if ($vmSandelys) {
     $nicId = $vmSandelys.NetworkProfile.NetworkInterfaces[0].Id
     $nic = Get-AzNetworkInterface -ResourceId $nicId
+    $warehouseSubnetId = $nic.IpConfigurations[0].Subnet.Id
     
     # 1. Tikriname ASG
     if ($nic.IpConfigurations.ApplicationSecurityGroups.Id -match "ASG-DB-Servers") {
@@ -110,10 +117,7 @@ if ($vmSandelys) {
         $nsgIdParts = $nic.NetworkSecurityGroup.Id -split '/'
         $vmNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgIdParts[4] -Name $nsgIdParts[-1]
         
-        $denyRule = $vmNsg.SecurityRules | Where-Object { 
-            ($_.Access -eq "Deny") -and 
-            (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80") -or ($_.DestinationPortRange -contains "*")) 
-        }
+        $denyRule = @(80, 1433 | ForEach-Object { Get-LabNsgPortRule -Nsg $vmNsg -Port $_ -Access Deny })
         
         if ($denyRule) {
             # Jei yra kelios taisyklės, paimame pirmą
@@ -141,20 +145,17 @@ if ($vmSandelys) {
 
 # E. Saugumas: Tinklo Siena (Subnet NSG)
 if ($vnetSandelys) {
-    $subnet = $vnetSandelys.Subnets | Where-Object { $_.NetworkSecurityGroup -ne $null } | Select-Object -First 1
+    $subnet = $vnetSandelys.Subnets | Where-Object { $_.Id -eq $warehouseSubnetId -and $_.NetworkSecurityGroup } | Select-Object -First 1
     
     if ($subnet) {
         $nsgIdParts = $subnet.NetworkSecurityGroup.Id -split '/'
         $subNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgIdParts[4] -Name $nsgIdParts[-1]
         
-        $allowRule = $subNsg.SecurityRules | Where-Object { 
-            ($_.Access -eq "Allow") -and 
-            (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80") -or ($_.DestinationPortRange -contains "*")) 
-        }
+        $allowRule = @(80, 1433 | ForEach-Object { Get-LabNsgPortRule -Nsg $subNsg -Port $_ -Access Allow })
         
         if ($allowRule) {
             $rule = $allowRule[0]
-            $netSecText = "[OK] - Subnet NSG leidžia Port $($rule.DestinationPortRange)"
+            $netSecText = "[OK] - Subnet NSG turi Inbound TCP Allow taisyklę, Port $($rule.DestinationPortRange)"
             $netSecColor = "Green"
         } else {
             $netSecText = "[KLAIDA] - Subnet NSG neturi Allow taisyklės"

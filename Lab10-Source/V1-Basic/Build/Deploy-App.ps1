@@ -5,10 +5,12 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$WebAppName,
     
-    [Parameter(Mandatory=$true)]
+    # Paliktas suderinamumui; saugyklą prijungia Bicep šablonas.
     [string]$StorageAccount
 )
 
+$ErrorActionPreference = 'Stop'
+$null = Get-Command az -ErrorAction Stop
 $ScriptDir = $PSScriptRoot
 $SourceDir = Join-Path -Path $ScriptDir -ChildPath "..\Source"
 $ZipPath   = Join-Path -Path $ScriptDir -ChildPath "site.zip"
@@ -40,6 +42,7 @@ Compress-Archive -Path $filesToZip -DestinationPath $ZipPath -Force
 # 2. Siunčiame į Web App
 Write-Host "Siunčiamas kodas į serverį $WebAppName..." -ForegroundColor Magenta
 az webapp deploy --resource-group $ResourceGroup --name $WebAppName --src-path $ZipPath --type zip
+if ($LASTEXITCODE -ne 0) { throw 'Web App diegimas nepavyko.' }
 
 # 3. Išvalome šiukšles
 Remove-Item $ZipPath -Force
@@ -52,7 +55,7 @@ Start-Sleep -Seconds 10
 $MainUrl = "https://$WebAppName.azurewebsites.net/default.asp"
 
 try {
-    $response = Invoke-WebRequest -Uri $MainUrl -UseBasicParsing -ErrorAction Stop
+    $response = Invoke-WebRequest -Uri $MainUrl -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
     
     # Tikriname, ar serveris grąžino 200 OK
     if ($response.StatusCode -eq 200) {
@@ -63,4 +66,5 @@ try {
 catch {
     Write-Host "❌ KLAIDA: Serveris nepasiekiamas ($MainUrl)" -ForegroundColor Red
     Write-Host "Klaidos detalės: $_" -ForegroundColor DarkRed
+    throw
 }

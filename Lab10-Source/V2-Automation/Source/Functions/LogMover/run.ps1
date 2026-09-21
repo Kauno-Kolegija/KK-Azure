@@ -8,7 +8,7 @@ Write-Host "--- Perkelti log failus ---"
 
 # 1. Prisijungimas
 if ([string]::IsNullOrEmpty($connStr)) { Write-Error "Nėra Connection String"; return }
-$ctx = New-AzStorageContext -ConnectionString $connStr
+$ctx = New-AzStorageContext -ConnectionString $connStr -ErrorAction Stop
 
 # 2. Gauname failų sąrašą
 try {
@@ -40,8 +40,18 @@ try {
                                         -Context $ctx `
                                         -DestContext $ctx `
                                         -Force -ErrorAction Stop | Out-Null
-                Start-Sleep -Milliseconds 200
-                Remove-AzStorageFile -ShareName $shareName -Path $name -Context $ctx
+                # Kopijavimas gali tęstis po Start-AzStorageBlobCopy grįžimo.
+                $deadline = (Get-Date).AddMinutes(2)
+                do {
+                    $copy = Get-AzStorageBlobCopyState -Container $containerName -Blob $name -Context $ctx -ErrorAction Stop
+                    if ($copy.Status -ne 'Pending') { break }
+                    if ((Get-Date) -ge $deadline) { throw 'Kopijavimo laukimo laikas baigėsi; originalas paliktas.' }
+                    Start-Sleep -Seconds 1
+                } while ($true)
+                if ($copy.Status -ne 'Success') {
+                    throw "Kopijavimas nesėkmingas ($($copy.Status)); originalas paliktas."
+                }
+                Remove-AzStorageFile -ShareName $shareName -Path $name -Context $ctx -ErrorAction Stop
                 Write-Host "   -x Perkelta ir ištrinta"
             } catch {
                 Write-Error "    ! KLAIDA su failu $name : $_"

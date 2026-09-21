@@ -1,38 +1,45 @@
-# ... (Jūsų esamas Web App diegimas viršuje) ...
-# iki 4. Tikrinimas (Healthcheck) eilutės. Nuo čia viską triname iki galo ir įkeliame naują kodą
+param(
+    [Parameter(Mandatory = $true)][string]$ResourceGroup,
+    [Parameter(Mandatory = $true)][string]$WebAppName,
+    [string]$FunctionAppName = "func-$WebAppName"
+)
 
-# 4. Tikrinimas (Atnaujinta Healthcheck dalis)
-Write-Host "Laukiama serverio starto (10s)..." -ForegroundColor Cyan
-Start-Sleep -Seconds 10
+$ErrorActionPreference = 'Stop'
+$null = Get-Command az -ErrorAction Stop
+$sourceDir = Join-Path $PSScriptRoot '../Source'
+$functionDir = Join-Path $sourceDir 'Functions'
+$siteZip = Join-Path $PSScriptRoot ('site-' + [guid]::NewGuid().ToString('N') + '.zip')
+$functionZip = Join-Path $PSScriptRoot ('func-' + [guid]::NewGuid().ToString('N') + '.zip')
 
-$HealthUrl = "https://$WebAppName.azurewebsites.net/health.asp"
+foreach ($required in @('default.asp', 'health.asp', 'Functions/host.json', 'Functions/LogMover/function.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $sourceDir $required))) { throw "Trūksta failo: $required" }
+}
 try {
-    $response = Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -ErrorAction Stop
-    if ($response.StatusCode -eq 200) {
-        Write-Host "✅ SĖKMĖ! Serveris veikia." -ForegroundColor Green
-        Write-Host "Svetainė: https://$WebAppName.azurewebsites.net/default.asp" -ForegroundColor Green
+    $siteFiles = @(Get-ChildItem -LiteralPath $sourceDir -Filter '*.asp' -File | Select-Object -ExpandProperty FullName)
+    Compress-Archive -LiteralPath $siteFiles -DestinationPath $siteZip
+    az webapp deploy --resource-group $ResourceGroup --name $WebAppName --src-path $siteZip --type zip
+    if ($LASTEXITCODE -ne 0) { throw 'Web App diegimas nepavyko.' }
+
+    Compress-Archive -Path (Join-Path $functionDir '*') -DestinationPath $functionZip
+    az functionapp deployment source config-zip --resource-group $ResourceGroup --name $FunctionAppName --src $functionZip
+    if ($LASTEXITCODE -ne 0) { throw 'Function App diegimas nepavyko.' }
+
+    # Tikriname ir health, ir puslapį, kuris iš tiesų įrašo žurnalą.
+    foreach ($endpoint in @('health.asp', 'default.asp')) {
+        $ready = $false
+        for ($attempt = 1; $attempt -le 6; $attempt++) {
+            try {
+                $response = Invoke-WebRequest -Uri "https://$WebAppName.azurewebsites.net/$endpoint" -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
+                $ready = $response.StatusCode -eq 200
+            } catch { $ready = $false }
+            if ($ready) { break }
+            if ($attempt -lt 6) { Start-Sleep -Seconds 10 }
+        }
+        if (-not $ready) { throw "Svetainės patikra nepavyko: $endpoint" }
+    }
+    Write-Host "[OK] Svetainė ir funkcijos kodas įdiegti. Archyvavimą patikrinkite po Timer paleidimo." -ForegroundColor Green
+} finally {
+    foreach ($archive in @($siteZip, $functionZip)) {
+        if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
     }
 }
-catch {
-    Write-Host "❌ KLAIDA: Serveris nepasiekiamas ($HealthUrl)" -ForegroundColor Red
-    Write-Host "Klaidos detalės: $_" -ForegroundColor DarkRed
-}
-
-# --- NAUJA DALIS: FUNCTION APP DIEGIMAS ---
-$FunctionAppName = "func-$WebAppName" # Jei pavadinote taip pat kaip bicep faile
-$FuncSourceDir = Join-Path -Path $ScriptDir -ChildPath "..\Source\Functions"
-$FuncZipPath   = Join-Path -Path $ScriptDir -ChildPath "func.zip"
-
-Write-Host "`n--- FUNCTION APP DIEGIMAS ---" -ForegroundColor Cyan
-Write-Host "Pakuojama funkcija iš: $FuncSourceDir"
-
-if (Test-Path $FuncZipPath) { Remove-Item $FuncZipPath -Force }
-Compress-Archive -Path "$FuncSourceDir\*" -DestinationPath $FuncZipPath -Force
-
-Write-Host "Siunčiama į $FunctionAppName..." -ForegroundColor Magenta
-
-# Function App irgi naudoja zip deploy
-az functionapp deployment source config-zip --resource-group $ResourceGroup --name $FunctionAppName --src $FuncZipPath
-
-Write-Host "✅ Funkcija įdiegta!" -ForegroundColor Green
-
