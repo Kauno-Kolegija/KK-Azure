@@ -59,7 +59,24 @@ if ($targetRG) {
         $statusObj = Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName -Name $vm.Name -Status
         $displayStatus = ($statusObj.Statuses | Where-Object Code -like "PowerState/*" | Select-Object -First 1).DisplayStatus
         
-        # Diskas
+        # OS diskas
+        $osDiskName = $vm.StorageProfile.OsDisk.Name
+
+        $osDisk = Get-AzDisk `
+            -ResourceGroupName $targetRG.ResourceGroupName `
+            -DiskName $osDiskName `
+            -ErrorAction SilentlyContinue
+
+        if ($osDisk) {
+            $osDiskText  = "[OK] - $($osDisk.Sku.Name)"
+            $osDiskColor = "Green"
+        }
+        else {
+            $osDiskText  = "[TRŪKSTA] - OS diskas nerastas"
+            $osDiskColor = "Red"
+        }
+
+        # Duomenų Diskas
         $dataDisks = $vm.StorageProfile.DataDisks
         $diskCount = @($dataDisks).Count
 
@@ -99,12 +116,15 @@ if ($targetRG) {
     } else {
         $vmText = "[TRŪKSTA] - Nerastas Virtualus Serveris"
         $vmColor = "Red"
+        $osDiskText = "---"
+        $osDiskColor = "Gray"
         $diskText = "---"
         $diskColor = "Gray"
     }
 
     $resourceResults += [PSCustomObject]@{ Name = "Virtualus Serveris"; Text = $vmText; Color = $vmColor }
     if ($vm) {
+        $resourceResults += [PSCustomObject]@{ Name = " - OS diskas"; Text = $osDiskText; Color = $osDiskColor }
         $resourceResults += [PSCustomObject]@{ Name = " - Duomenų diskas"; Text = $diskText; Color = $diskColor }
     }
 
