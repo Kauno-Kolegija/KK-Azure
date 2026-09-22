@@ -1,5 +1,39 @@
 {
-    "InstructorEmail": "Mantas.Bartkevicius@kaunokolegija.lt",
-    "KaunoKolegija": "KAUNO KOLEGIJA",
-    "ModuleName": "DEBESŲ KOMPIUTERIJA"
+  "InstructorEmail": "Mantas.Bartkevicius@kaunokolegija.lt",
+  "KaunoKolegija": "KAUNO KOLEGIJA",
+
+  "ModuleName": {
+    "LT": "DEBESŲ KOMPIUTERIJA",
+    "EN": "CLOUD COMPUTING"
+  },
+
+  "Messages": {
+    "LT": {
+      "Running": "Vykdoma patikra...",
+      "FinalResult": "GALUTINIS REZULTATAS (Padarykite nuotrauką)",
+      "Date": "Data",
+      "Student": "Studentas",
+      "Ok": "OK",
+      "Error": "KLAIDA",
+      "InvalidFormat": "Netinkamas formatas",
+      "CheckFailed": "Nepavyko atlikti patikros",
+      "ConfigLoadFailed": "Nepavyko atsisiųsti konfigūracijos (JSON).",
+      "AzureNotConnected": "Neprisijungta prie Azure!",
+      "SystemIdentity": "Sisteminė tapatybė"
+    },
+
+    "EN": {
+      "Running": "Running validation...",
+      "FinalResult": "FINAL RESULT (Take a screenshot)",
+      "Date": "Date",
+      "Student": "Student",
+      "Ok": "OK",
+      "Error": "ERROR",
+      "InvalidFormat": "Invalid format",
+      "CheckFailed": "Validation failed",
+      "ConfigLoadFailed": "Failed to download configuration (JSON).",
+      "AzureNotConnected": "Not connected to Azure!",
+      "SystemIdentity": "System Identity"
+    }
+  }
 }

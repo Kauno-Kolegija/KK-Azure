@@ -1,122 +1,217 @@
+# ============================================================
+# LAB 1 tikrinimo skriptas
+# Kalba pagal nutylėjimą: LT
+# EN kalbą nustato Check-Lab1-EN.ps1 paleidiklis
+# ============================================================
+
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
-} catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų."
-    exit
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    }
+    else {
+        Invoke-RestMethod `
+            'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' `
+            -ErrorAction Stop |
+            Invoke-Expression
+    }
+}
+catch {
+    # Ši klaida rodoma dar prieš užkraunant kalbų konfigūraciją
+    Write-Error "Failed to load common functions."
+    throw
 }
 
-# --- 2. INICIJUOJAME DARBĄ ---
-$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json"
+
+# --- 2. KALBA ---
+if ($Lang -notin @("LT", "EN")) {
+    $Lang = "LT"
+}
+
+
+# --- 3. INICIJUOJAME DARBĄ ---
+$Setup = Initialize-Lab `
+    -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json" `
+    -Lang $Lang
 
 $GlobCfg = $Setup.GlobalConfig
 $LocCfg  = $Setup.LocalConfig
 
+# Bendri tekstai
+$Msg = $GlobCfg.Messages.$Lang
 
-# A. Studento paskyros domeno tikrinimas
-#-----------------------------------------
+# LAB1 tekstai
+$LabMsg = $LocCfg.Messages
+$LabName = $LocCfg.LabName.$Lang
+
+$TxtAccount          = $LocCfg.Checks.Account.$Lang
+$TxtSubscriptionName = $LocCfg.Checks.SubscriptionName.$Lang
+$TxtInstructorAccess = $LocCfg.Checks.InstructorAccess.$Lang
+$TxtBudget           = $LocCfg.Checks.Budget.$Lang
+
+$studentEmail = $Setup.StudentEmail
+
+
+# ============================================================
+# A. STUDENTO PASKYROS TIKRINIMAS
+# ============================================================
+
 try {
-    # 1. Studento paskyros tikrinimas
-    $studentEmail = $Setup.StudentEmail
     if ($studentEmail -match '(?i)@itm\.kaunokolegija\.lt$') {
-        $res0Text  = "[OK] - $studentEmail"
+        $res0Text  = "[$($Msg.Ok)] - $studentEmail"
         $res0Color = "Green"
     }
     else {
-        $res0Text  = "[KLAIDA] - Naudokite @itm.kaunokolegija.lt paskyrą: $studentEmail"
+        $res0Text = "[$($Msg.Error)] - $($LabMsg.InvalidAccount.$Lang): $studentEmail"
         $res0Color = "Red"
     }
 }
 catch {
-    $res0Text  = "[KLAIDA] - Nepavyko nustatyti prisijungusios paskyros"
+    $res0Text  = "[$($Msg.Error)] - $($LabMsg.AccountCheckFailed.$Lang)"
     $res0Color = "Red"
 }
 
 
-# B. Prenumeratos tikrinimas
-#-----------------------------------------
+# ============================================================
+# B. PRENUMERATOS PAVADINIMO TIKRINIMAS
+# ============================================================
+
 $context = Get-AzContext
 $subName = $context.Subscription.Name
+
 $isNameCorrect = $subName -match $LocCfg.NamingPattern
 
 if ($isNameCorrect) {
-    $res1Text  = "[OK] - $subName"
+    $res1Text  = "[$($Msg.Ok)] - $subName"
     $res1Color = "Green"
-} else {
-    $res1Text  = "[KLAIDA] - $subName (Netinkamas formatas)"
+}
+else {
+    $res1Text = "[$($Msg.Error)] - $subName ($($LabMsg.InvalidSubscriptionFormat.$Lang))"
     $res1Color = "Red"
 }
 
-# C. Dėstytojo teisių tikrinimas
-#-----------------------------------------
+
+# ============================================================
+# C. DĖSTYTOJO TEISIŲ TIKRINIMAS
+# ============================================================
+
 try {
-    $currentUser = $context.Account.Id
-    
-    # Paimame VISUS priskyrimus be jokių ribojančių scope parametrų
     $assignments = Get-AzRoleAssignment -ErrorAction SilentlyContinue
 
-    # Filtruojame naudodami foreach (veikia stabiliau nei Where-Object su tuščiais Azure laukais)
     $allContributors = @()
+
     if ($assignments) {
         foreach ($a in $assignments) {
-            if ($a.RoleDefinitionName -match "Contributor" -and $a.SignInName -ne $currentUser) {
+
+            $isContributor =
+                $a.RoleDefinitionName -eq $LocCfg.RoleToCheck
+
+            $isStudent =
+                $a.SignInName -and
+                $studentEmail -and
+                ($a.SignInName -ieq $studentEmail)
+
+            if ($isContributor -and -not $isStudent) {
                 $allContributors += $a
             }
         }
     }
 
-    if ($allContributors.Count -gt 0) {
-        $totalCount = $allContributors.Count
 
-        # Ieškome Manto
-        $mantas = $null
-        foreach ($c in $allContributors) {
-            if (($c.DisplayName -match "Mantas" -and $c.DisplayName -match "Bartkevičius") -or ($c.SignInName -match "Mantas.Bartkevicius")) {
-                $mantas = $c
-                break
-            }
-        }
+    # Ieškome konkrečiai dėstytojo pagal global.json el. paštą
+    $instructor = $null
 
-        if ($mantas) {
-            $others = $totalCount - 1
-            $suffix = if ($others -gt 0) { " (+ $others kiti)" } else { "" }
-            
-            $dispName = if ($mantas.DisplayName) { $mantas.DisplayName } elseif ($mantas.SignInName) { $mantas.SignInName } else { "Dėstytojas" }
-            
-            $res2Text  = "[OK] - ${dispName}${suffix}"
-            $res2Color = "Green"
-        } else {
-            $firstOther = $allContributors[0]
-            $name = if ($firstOther.DisplayName) { $firstOther.DisplayName } elseif ($firstOther.SignInName) { $firstOther.SignInName } else { "Kolega" }
-            
-            $res2Text  = "[OK] - $name (Bet Mantas Bartkevičius nerastas)"
-            $res2Color = "Yellow" 
+    foreach ($c in $allContributors) {
+        if (
+            $c.SignInName -and
+            ($c.SignInName -ieq $GlobCfg.InstructorEmail)
+        ) {
+            $instructor = $c
+            break
         }
-    } else {
-        $res2Text  = "[KLAIDA] - Nerasta jokių vartotojų su 'Contributor' role (išskyrus jus). Jei ką tik pridėjote, palaukite 5-10 min!"
-        $res2Color = "Red"
     }
 
-} catch {
-    $res2Text  = "[KLAIDA] - Nepavyko nuskaityti teisių: $($_.Exception.Message)"
+
+    if ($instructor) {
+
+        $displayName = if ($instructor.DisplayName) {
+            $instructor.DisplayName
+        }
+        elseif ($instructor.SignInName) {
+            $instructor.SignInName
+        }
+        else {
+            $LabMsg.InstructorFallbackName.$Lang
+        }
+
+
+        $otherCount = $allContributors.Count - 1
+
+        if ($otherCount -gt 0) {
+            $suffix = " " + (
+                $LabMsg.OtherContributors.$Lang -f $otherCount
+            )
+        }
+        else {
+            $suffix = ""
+        }
+
+
+        $res2Text  = "[$($Msg.Ok)] - ${displayName}${suffix}"
+        $res2Color = "Green"
+    }
+    elseif ($allContributors.Count -gt 0) {
+
+        $firstOther = $allContributors[0]
+
+        $otherName = if ($firstOther.DisplayName) {
+            $firstOther.DisplayName
+        }
+        elseif ($firstOther.SignInName) {
+            $firstOther.SignInName
+        }
+        else {
+            $LabMsg.OtherUserFallbackName.$Lang
+        }
+
+        $res2Text = "[$($Msg.Error)] - $otherName ($($LabMsg.InstructorNotFound.$Lang))"
+        $res2Color = "Yellow"
+    }
+    else {
+        $res2Text = "[$($Msg.Error)] - $($LabMsg.NoContributorFound.$Lang)"
+        $res2Color = "Red"
+    }
+}
+catch {
+    $res2Text = "[$($Msg.Error)] - $($LabMsg.RoleCheckFailed.$Lang): $($_.Exception.Message)"
     $res2Color = "Red"
 }
 
-# D. Budget tikrinimas
-#-----------------------------------------
+
+# ============================================================
+# D. BUDGET TIKRINIMAS
+# ============================================================
+
 try {
+    # Gauname vartotojui prieinamus Billing Accounts
     $accountsResponse = Invoke-AzRestMethod `
         -Method GET `
         -Uri "https://management.azure.com/providers/Microsoft.Billing/billingAccounts?api-version=2024-04-01" `
         -ErrorAction Stop
 
-    $accounts = ($accountsResponse.Content | ConvertFrom-Json).value
+    $accounts = (
+        $accountsResponse.Content |
+        ConvertFrom-Json
+    ).value
+
 
     $foundBudgets = @()
 
+
     foreach ($account in $accounts) {
 
-        $budgetUri = "https://management.azure.com/providers/Microsoft.Billing/billingAccounts/$($account.name)/providers/Microsoft.Consumption/budgets?api-version=2024-08-01"
+        $budgetUri = `
+            "https://management.azure.com/providers/Microsoft.Billing/billingAccounts/$($account.name)/providers/Microsoft.Consumption/budgets?api-version=2024-08-01"
 
         try {
             $budgetResponse = Invoke-AzRestMethod `
@@ -124,57 +219,79 @@ try {
                 -Uri $budgetUri `
                 -ErrorAction Stop
 
-            $budgets = ($budgetResponse.Content | ConvertFrom-Json).value
+            $budgets = (
+                $budgetResponse.Content |
+                ConvertFrom-Json
+            ).value
+
 
             if ($budgets) {
                 $foundBudgets += $budgets
             }
         }
         catch {
-            # Jei vieno billing account biudžetų patikrinti nepavyksta,
-            # pereiname prie kito.
+            # Jei vieno Billing Account nepavyksta nuskaityti,
+            # tikriname kitus.
         }
     }
 
-    if ($foundBudgets.Count -gt 0) {
-        $budgetNames = $foundBudgets |
-            ForEach-Object { $_.name }
 
-        $res3Text  = "[OK] - " + ($budgetNames -join ", ")
+    if ($foundBudgets.Count -gt 0) {
+
+        $budgetNames = $foundBudgets |
+            ForEach-Object {
+                $_.name
+            }
+
+        $res3Text = "[$($Msg.Ok)] - " + ($budgetNames -join ", ")
         $res3Color = "Green"
     }
     else {
-        $res3Text  = "[KLAIDA] - Budget nerastas"
+        $res3Text = "[$($Msg.Error)] - $($LabMsg.BudgetNotFound.$Lang)"
         $res3Color = "Red"
     }
 }
 catch {
-    $res3Text  = "[KLAIDA] - Nepavyko patikrinti Budget: $($_.Exception.Message)"
+    $res3Text = "[$($Msg.Error)] - $($LabMsg.BudgetCheckFailed.$Lang): $($_.Exception.Message)"
     $res3Color = "Red"
 }
 
-# --- 4. GALUTINIS REZULTATAS (Ataskaitai) ---
+
+# ============================================================
+# GALUTINIS REZULTATAS
+# ============================================================
+
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
-Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host "$($Setup.HeaderTitle)"
-Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
-Write-Host "Data: $date"
-Write-Host "Studentas: $($Setup.StudentEmail)"
+Write-Host ""
+Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
+
 Write-Host "==================================================" -ForegroundColor Gray
 
-Write-Host "1. Paskyra:                  " -NoNewline
+Write-Host $Setup.HeaderTitle
+Write-Host $LabName -ForegroundColor Yellow
+
+Write-Host "$($Msg.Date): $date"
+Write-Host "$($Msg.Student): $studentEmail"
+
+Write-Host "==================================================" -ForegroundColor Gray
+
+
+Write-Host ("1. {0,-27}" -f ($TxtAccount + ":")) -NoNewline
 Write-Host $res0Text -ForegroundColor $res0Color
 
-Write-Host "2. Prenumeratos pavadinimas: " -NoNewline
+
+Write-Host ("2. {0,-27}" -f ($TxtSubscriptionName + ":")) -NoNewline
 Write-Host $res1Text -ForegroundColor $res1Color
 
-Write-Host "3. Dėstytojo prieiga:        " -NoNewline
+
+Write-Host ("3. {0,-27}" -f ($TxtInstructorAccess + ":")) -NoNewline
 Write-Host $res2Text -ForegroundColor $res2Color
 
-Write-Host "4. Budget tikrinimas:        " -NoNewline
+
+Write-Host ("4. {0,-27}" -f ($TxtBudget + ":")) -NoNewline
 Write-Host $res3Text -ForegroundColor $res3Color
+
 
 Write-Host "==================================================" -ForegroundColor Gray
 Write-Host ""

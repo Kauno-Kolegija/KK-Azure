@@ -1,5 +1,89 @@
 {
-    "LabName": "LAB 1: Azure Paskyra",
-    "RoleToCheck": "Contributor",
-    "NamingPattern": "^[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-?[0-9]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+$"
+  "LabName": {
+    "LT": "LAB 1: Azure Paskyra",
+    "EN": "LAB 1: Azure Account"
+  },
+
+  "Checks": {
+    "Account": {
+      "LT": "Paskyra",
+      "EN": "Account"
+    },
+
+    "SubscriptionName": {
+      "LT": "Prenumeratos pavadinimas",
+      "EN": "Subscription name"
+    },
+
+    "InstructorAccess": {
+      "LT": "Dėstytojo prieiga",
+      "EN": "Lecturer access"
+    },
+
+    "Budget": {
+      "LT": "Budget tikrinimas",
+      "EN": "Budget check"
+    }
+  },
+
+  "Messages": {
+    "InvalidAccount": {
+      "LT": "Naudokite @itm.kaunokolegija.lt paskyrą",
+      "EN": "Use your @itm.kaunokolegija.lt account"
+    },
+
+    "AccountCheckFailed": {
+      "LT": "Nepavyko nustatyti prisijungusios paskyros",
+      "EN": "Failed to identify the signed-in account"
+    },
+
+    "InvalidSubscriptionFormat": {
+      "LT": "Netinkamas formatas",
+      "EN": "Invalid format"
+    },
+
+    "InstructorFallbackName": {
+      "LT": "Dėstytojas",
+      "EN": "Lecturer"
+    },
+
+    "OtherUserFallbackName": {
+      "LT": "Kitas vartotojas",
+      "EN": "Other user"
+    },
+
+    "OtherContributors": {
+      "LT": "(+ {0} kiti)",
+      "EN": "(+ {0} others)"
+    },
+
+    "InstructorNotFound": {
+      "LT": "Mantas Bartkevičius nerastas",
+      "EN": "Mantas Bartkevičius not found"
+    },
+
+    "NoContributorFound": {
+      "LT": "Nerasta kitų vartotojų su Contributor role. Jei ką tik pridėjote, palaukite 5-10 min.",
+      "EN": "No other users with the Contributor role were found. If you just added the role, wait 5-10 minutes."
+    },
+
+    "RoleCheckFailed": {
+      "LT": "Nepavyko nuskaityti teisių",
+      "EN": "Failed to read role assignments"
+    },
+
+    "BudgetNotFound": {
+      "LT": "Budget nerastas",
+      "EN": "Budget not found"
+    },
+
+    "BudgetCheckFailed": {
+      "LT": "Nepavyko patikrinti Budget",
+      "EN": "Failed to check Budget"
+    }
+  },
+
+  "RoleToCheck": "Contributor",
+
+  "NamingPattern": "^[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-?[0-9]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+$"
 }

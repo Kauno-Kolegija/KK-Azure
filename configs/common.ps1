@@ -1,45 +1,59 @@
 function Initialize-Lab {
     param (
-        [string]$LocalConfigUrl
+        [string]$LocalConfigUrl,
+        [string]$Lang = "LT"
     )
 
-    # 1. Konfigūracijos ir protokolas
+    if ($Lang -notin @("LT", "EN")) {
+        $Lang = "LT"
+    }
+
     $GlobalUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/global.json"
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    # 2. Siunčiame failus
     try {
         $GlobalConfig = Invoke-RestMethod -Uri $GlobalUrl -ErrorAction Stop
         $LocalConfig  = Invoke-RestMethod -Uri $LocalConfigUrl -ErrorAction Stop
-    } catch {
-        Write-Error "KLAIDA: Nepavyko atsisiųsti konfigūracijos (JSON)."
-        throw $_
+    }
+    catch {
+        Write-Error "Failed to download configuration (JSON)."
+        throw
     }
 
-    # 3. Identifikuojame studentą
+    $Msg = $GlobalConfig.Messages.$Lang
+
     $context = Get-AzContext
-    if (-not $context) { Write-Error "Neprisijungta prie Azure!"; exit }
+
+    if (-not $context) {
+        Write-Error $Msg.AzureNotConnected
+        exit
+    }
 
     $StudentEmail = $null
+
     if ($env:ACC_USER_NAME -and $env:ACC_USER_NAME -match "@") {
         $StudentEmail = $env:ACC_USER_NAME
-    } elseif (Get-Command az -ErrorAction SilentlyContinue) {
-        try { $StudentEmail = az account show --query "user.name" -o tsv 2>$null } catch {}
     }
-    
+    elseif (Get-Command az -ErrorAction SilentlyContinue) {
+        try {
+            $StudentEmail = az account show --query "user.name" -o tsv 2>$null
+        }
+        catch {}
+    }
+
     if (-not $StudentEmail -or $StudentEmail -match "MSI@") {
-        $StudentEmail = "$($context.Account.Id) (System Identity)"
+        $StudentEmail = "$($context.Account.Id) ($($Msg.SystemIdentity))"
     }
 
-    # 4. VALOME EKRANĄ IR RODOME TIK GELTONĄ PRANEŠIMĄ
     Clear-Host
-    Write-Host "Vykdoma patikra..." -ForegroundColor Yellow
+    Write-Host $Msg.Running -ForegroundColor Yellow
 
-    # 5. Grąžiname duomenis skriptui
     return [PSCustomObject]@{
         GlobalConfig = $GlobalConfig
         LocalConfig  = $LocalConfig
         StudentEmail = $StudentEmail
-        HeaderTitle  = "$($GlobalConfig.KaunoKolegija) | $($GlobalConfig.ModuleName)"
+        HeaderTitle  = "$($GlobalConfig.KaunoKolegija) | $($GlobalConfig.ModuleName.$Lang)"
+        Language     = $Lang
+        Messages     = $Msg
     }
 }
