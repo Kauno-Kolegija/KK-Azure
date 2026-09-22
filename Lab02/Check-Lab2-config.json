@@ -63,7 +63,20 @@
     }
   },
 
+    "CloudShellResourceGroup": {
+    "LT": "Cloud Shell resursų grupė",
+    "EN": "Cloud Shell Resource Group"
+  },
+
+    "CloudShellStorage": {
+    "LT": "Cloud Shell Storage Account",
+    "EN": "Cloud Shell Storage Account"
+  },
+
   "ResourceGroupPattern": "^RG-LAB02-",
+  "CloudShell": {
+  "ResourceGroupPattern": "^RG-.*-CloudShell$"
+  },
 
   "ExpectedWebApp": {
     "Runtime": "10",

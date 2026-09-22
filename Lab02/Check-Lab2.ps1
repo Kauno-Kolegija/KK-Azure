@@ -279,6 +279,61 @@ if ($targetRG) {
         }
     }
 
+    # ============================================================
+    # D. CLOUD SHELL RESOURCE GROUP
+    # ============================================================
+
+    $cloudShellRG = Get-AzResourceGroup |
+        Where-Object {
+            $_.ResourceGroupName -match $LocCfg.CloudShell.ResourceGroupPattern
+        } |
+        Select-Object -First 1
+
+
+    if ($cloudShellRG) {
+
+        $results += [PSCustomObject]@{
+            Name   = $LocCfg.Checks.CloudShellResourceGroup.$Lang
+            Text   = "[$($Msg.Ok)] - $($cloudShellRG.ResourceGroupName) ($($cloudShellRG.Location))"
+            Color  = "Green"
+            Indent = 0
+        }
+
+
+        $cloudShellStorage = Get-AzStorageAccount `
+            -ResourceGroupName $cloudShellRG.ResourceGroupName `
+            -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+
+
+        if ($cloudShellStorage) {
+
+            $results += [PSCustomObject]@{
+                Name   = $LocCfg.Checks.CloudShellStorage.$Lang
+                Text   = "[$($Msg.Ok)] - $($cloudShellStorage.StorageAccountName) ($($cloudShellStorage.Location)) [$($cloudShellStorage.Sku.Name)]"
+                Color  = "Green"
+                Indent = 0
+            }
+        }
+        else {
+
+            $results += [PSCustomObject]@{
+                Name   = $LocCfg.Checks.CloudShellStorage.$Lang
+                Text   = "[$($LabMsg.MissingStatus.$Lang)] - $($LabMsg.ResourceNotFound.$Lang)"
+                Color  = "Red"
+                Indent = 0
+            }
+        }
+    }
+    else {
+
+        $results += [PSCustomObject]@{
+            Name   = $LocCfg.Checks.CloudShellResourceGroup.$Lang
+            Text   = "[$($LabMsg.MissingStatus.$Lang)] - $($LabMsg.ResourceNotFound.$Lang)"
+            Color  = "Red"
+            Indent = 0
+        }
+    }
 }
 else {
 
