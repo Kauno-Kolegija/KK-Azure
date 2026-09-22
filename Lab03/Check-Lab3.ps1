@@ -61,22 +61,34 @@ if ($targetRG) {
         
         # Diskas
         $dataDisks = $vm.StorageProfile.DataDisks
-        $diskCount = $dataDisks.Count
-        
-        if ($actualSize -eq $expectedSize) {
-            $vmText = "[OK] - $($vm.Name) ($actualSize) [$displayStatus]"
-            $vmColor = "Green"
-        } else {
-            $vmText = "[DĖMESIO] - $($vm.Name). Dydis: $actualSize (Reikėjo: $expectedSize)"
-            $vmColor = "Yellow"
-        }
+        $diskCount = @($dataDisks).Count
 
-        # Atskiras įrašas diskui
         if ($diskCount -ge 1) {
-            $diskSizes = ($dataDisks |
-                ForEach-Object { "$($_.DiskSizeGB) GiB" }) -join ", "
 
-            $diskText  = "[OK] - Rasta papildomų diskų: $diskCount ($diskSizes)"
+            $diskSizes = @()
+
+            foreach ($dataDisk in $dataDisks) {
+
+                if ($dataDisk.ManagedDisk.Id) {
+
+                    $disk = Get-AzDisk `
+                        -ResourceGroupName $targetRG.ResourceGroupName `
+                        -DiskName $dataDisk.Name `
+                        -ErrorAction SilentlyContinue
+
+                    if ($disk) {
+                        $diskSizes += "$($disk.DiskSizeGB) GiB"
+                    }
+                }
+            }
+
+            if ($diskSizes.Count -gt 0) {
+                $diskText = "[OK] - Rasta papildomų diskų: $diskCount ($($diskSizes -join ', '))"
+            }
+            else {
+                $diskText = "[OK] - Rasta papildomų diskų: $diskCount"
+            }
+
             $diskColor = "Green"
         }
         else {
