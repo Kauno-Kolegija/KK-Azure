@@ -1,14 +1,82 @@
 {
-  "LabName": "LAB 3: Virtualūs resursai",
-  "ResourceGroupPattern": "RG-LAB03",
-  "RequiredResources": [
-    {
-      "Name": "Virtualus serveris (VM)",
-      "Type": "Microsoft.Compute/virtualMachines"
+  "LabName": {
+    "LT": "LAB 3: Virtualūs resursai",
+    "EN": "LAB 3: Virtual Resources"
+  },
+
+  "Checks": {
+    "ResourceGroup": {
+      "LT": "Resursų grupė",
+      "EN": "Resource Group"
     },
-    {
-      "Name": "Function App (Svetainė)",
-      "Type": "Microsoft.Web/sites"
+    "VirtualMachine": {
+      "LT": "Virtualus Serveris",
+      "EN": "Virtual Machine"
+    },
+    "OsDisk": {
+      "LT": "OS diskas",
+      "EN": "OS Disk"
+    },
+    "DataDisk": {
+      "LT": "Duomenų diskas",
+      "EN": "Data Disk"
+    },
+    "FunctionApp": {
+      "LT": "Function App",
+      "EN": "Function App"
+    },
+    "HttpFunction": {
+      "LT": "Funkcija (HTTP)",
+      "EN": "Function (HTTP)"
+    },
+    "TimerFunction": {
+      "LT": "Funkcija (Timer)",
+      "EN": "Function (Timer)"
     }
-  ]
+  },
+
+  "Messages": {
+    "CheckingFunctions": {
+      "LT": "Tikrinama funkcijų būsena...",
+      "EN": "Checking function status..."
+    },
+    "ResourceGroupNotFound": {
+      "LT": "Nerasta LAB3 resursų grupė",
+      "EN": "LAB3 Resource Group not found"
+    },
+    "VirtualMachineNotFound": {
+      "LT": "Nerastas Virtualus Serveris",
+      "EN": "Virtual Machine not found"
+    },
+    "OsDiskNotFound": {
+      "LT": "OS diskas nerastas",
+      "EN": "OS Disk not found"
+    },
+    "DataDiskFound": {
+      "LT": "Rasta papildomų diskų",
+      "EN": "Additional data disks found"
+    },
+    "DataDiskNotFound": {
+      "LT": "Nėra papildomo duomenų disko",
+      "EN": "Additional Data Disk not found"
+    },
+    "HttpFunctionNotFound": {
+      "LT": "Nerasta funkcija *-fun1",
+      "EN": "Function *-fun1 not found"
+    },
+    "TimerFunctionNotFound": {
+      "LT": "Nerasta funkcija *-fun2",
+      "EN": "Function *-fun2 not found"
+    },
+    "FunctionAppNotFound": {
+      "LT": "Nerasta Function App",
+      "EN": "Function App not found"
+    },
+    "NoResourceGroup": {
+      "LT": "Nėra resursų grupės",
+      "EN": "Resource Group not found"
+    }
+  },
+
+  "ResourceGroupPattern": "^RG-LAB03-"
 }
