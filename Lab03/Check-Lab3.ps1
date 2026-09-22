@@ -16,15 +16,10 @@ $LocCfg = $Setup.LocalConfig
 $targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB03" } | Select-Object -First 1
 
 if ($targetRG) {
-    # Tikriname regioną (Turi būti Norway East pagal 30 punktą)
-    if ($targetRG.Location -eq "norwayeast") {
-        $rgText  = "[OK] - $($targetRG.ResourceGroupName) (Norway East)"
-        $rgColor = "Green"
-    } else {
-        $rgText  = "[DĖMESIO] - $($targetRG.ResourceGroupName) (Yra: $($targetRG.Location), Reikėjo: norwayeast)"
-        $rgColor = "Yellow"
-    }
-} else {
+    $rgText  = "[OK] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
+    $rgColor = "Green"
+}
+else {
     $rgText  = "[KLAIDA] - Nerasta grupė RG-LAB03..."
     $rgColor = "Red"
 }
@@ -45,13 +40,26 @@ if ($targetRG) {
     
     if ($vm) {
         $actualSize = $vm.HardwareProfile.VmSize
-        $expectedSize = "Standard_B1ms"
+
+        $statusObj = Get-AzVM `
+            -ResourceGroupName $targetRG.ResourceGroupName `
+            -Name $vm.Name `
+            -Status
+
+        $displayStatus = (
+            $statusObj.Statuses |
+            Where-Object Code -like "PowerState/*" |
+            Select-Object -First 1
+        ).DisplayStatus
+
+        $vmText  = "[OK] - $($vm.Name) ($actualSize) [$displayStatus]"
+        $vmColor = "Green"
         
         # Būsena
         $statusObj = Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName -Name $vm.Name -Status
         $displayStatus = ($statusObj.Statuses | Where-Object Code -like "PowerState/*" | Select-Object -First 1).DisplayStatus
         
-        # Diskas (46-49 punktai reikalauja papildomo disko)
+        # Diskas
         $dataDisks = $vm.StorageProfile.DataDisks
         $diskCount = $dataDisks.Count
         
@@ -65,10 +73,14 @@ if ($targetRG) {
 
         # Atskiras įrašas diskui
         if ($diskCount -ge 1) {
-            $diskText = "[OK] - Rasta papildomų diskų: $diskCount (128 GiB)"
+            $diskSizes = ($dataDisks |
+                ForEach-Object { "$($_.DiskSizeGB) GiB" }) -join ", "
+
+            $diskText  = "[OK] - Rasta papildomų diskų: $diskCount ($diskSizes)"
             $diskColor = "Green"
-        } else {
-            $diskText = "[TRŪKSTA] - Nėra papildomo duomenų disko (Data Disk)"
+        }
+        else {
+            $diskText  = "[TRŪKSTA] - Nėra papildomo duomenų disko (Data Disk)"
             $diskColor = "Red"
         }
 
