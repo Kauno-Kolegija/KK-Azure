@@ -16,7 +16,7 @@ $LocCfg = $Setup.LocalConfig
 $targetRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } | Select-Object -First 1
 
 if ($targetRG) {
-    $rgText  = "[OK] - $($targetRG.ResourceGroupName)"
+    $rgText  = "[OK] - $($targetRG.ResourceGroupName)  ($($targetRG.Location))"
     $rgColor = "Green"
 } else {
     $rgText  = "[KLAIDA] - Nerasta grupė '$($LocCfg.ResourceGroupPattern)...'"
