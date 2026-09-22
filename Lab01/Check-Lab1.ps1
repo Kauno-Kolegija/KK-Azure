@@ -256,6 +256,57 @@ catch {
     $res3Color = "Red"
 }
 
+# ============================================================
+# E. LEIDŽIAMŲ AZURE REGIONŲ NUSTATYMAS
+# ============================================================
+
+try {
+    $subscriptionId = (Get-AzContext).Subscription.Id
+
+    $policyUri = "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Authorization/policyAssignments?api-version=2026-06-01&`$filter=atScope()"
+
+    $policyResponse = Invoke-AzRestMethod `
+        -Method GET `
+        -Uri $policyUri `
+        -ErrorAction Stop
+
+    $assignments = ($policyResponse.Content | ConvertFrom-Json).value
+
+    $allowedLocations = @()
+
+    foreach ($assignment in $assignments) {
+
+        if (
+            $assignment.properties.displayName -eq "Allowed resource deployment regions"
+        ) {
+            $parameters = $assignment.properties.parameters
+
+            if ($parameters.allowedLocations.value) {
+                $allowedLocations += @($parameters.allowedLocations.value)
+            }
+
+            if ($parameters.listOfAllowedLocations.value) {
+                $allowedLocations += @($parameters.listOfAllowedLocations.value)
+            }
+        }
+    }
+
+    $allowedLocations = $allowedLocations |
+        Sort-Object -Unique
+
+    if ($allowedLocations.Count -gt 0) {
+        $res4Text = "[INFO] - " + ($allowedLocations -join ", ")
+        $res4Color = "Cyan"
+    }
+    else {
+        $res4Text = "[INFO] - $($LabMsg.AllowedLocationsNotFound.$Lang)"
+        $res4Color = "Yellow"
+    }
+}
+catch {
+    $res4Text = "[INFO] - $($LabMsg.AllowedLocationsCheckFailed.$Lang): $($_.Exception.Message)"
+    $res4Color = "Yellow"
+}
 
 # ============================================================
 # GALUTINIS REZULTATAS
@@ -291,6 +342,9 @@ Write-Host $res2Text -ForegroundColor $res2Color
 
 Write-Host ("4. {0,-27}" -f ($TxtBudget + ":")) -NoNewline
 Write-Host $res3Text -ForegroundColor $res3Color
+
+Write-Host ("5. {0,-27}" -f ("Leidžiami regionai:")) -NoNewline
+Write-Host $res4Text -ForegroundColor $res4Color
 
 
 Write-Host "==================================================" -ForegroundColor Gray

@@ -1,4 +1,4 @@
-# English launcher for LAB 1
+# English launcher
 
 $Lang = "EN"
 

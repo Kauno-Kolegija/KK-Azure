@@ -83,6 +83,19 @@
     }
   },
 
+  "AllowedLocations": {
+  "LT": "Leidžiami regionai",
+  "EN": "Allowed regions"
+  },
+  "AllowedLocationsNotFound": {
+  "LT": "Leidžiamų regionų sąrašo rasti nepavyko",
+  "EN": "Allowed region list could not be found"
+  },
+  "AllowedLocationsCheckFailed": {
+    "LT": "Nepavyko nuskaityti leidžiamų regionų",
+    "EN": "Failed to read allowed regions"
+  },
+
   "RoleToCheck": "Contributor",
 
   "NamingPattern": "^[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-?[0-9]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+$"
