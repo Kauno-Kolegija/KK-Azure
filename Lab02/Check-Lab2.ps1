@@ -1,24 +1,60 @@
+# ============================================================
+# LAB 2 tikrinimo skriptas
+# Default kalba: LT
+# EN kalbą nustato Check-Lab2-EN.ps1 paleidiklis
+# ============================================================
+
 # --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    }
+    else {
+        Invoke-RestMethod `
+            'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' `
+            -ErrorAction Stop |
+            Invoke-Expression
+    }
 }
 catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų (common.ps1)."
-    exit
+    # Kalbų konfigūracija dar neužkrauta
+    Write-Error "Failed to load common functions."
+    throw
 }
 
-# --- 2. INICIJUOJAME DARBĄ ---
+
+# --- 2. KALBA ---
+if ($Lang -notin @("LT", "EN")) {
+    $Lang = "LT"
+}
+
+
+# --- 3. INICIJUOJAME DARBĄ ---
 $Setup = Initialize-Lab `
-    -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json"
+    -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json" `
+    -Lang $Lang
 
-$LocCfg = $Setup.LocalConfig
+$GlobCfg = $Setup.GlobalConfig
+$LocCfg  = $Setup.LocalConfig
+
+# Bendri tekstai
+$Msg = $Setup.Messages
+
+# LAB2 tekstai
+$LabMsg  = $LocCfg.Messages
+$LabName = $LocCfg.LabName.$Lang
+
+$TxtResourceGroup = $LocCfg.Checks.ResourceGroup.$Lang
+$TxtWebApp        = $LocCfg.Checks.WebApp.$Lang
+$TxtRuntime       = $LocCfg.Checks.Runtime.$Lang
+$TxtAppService    = $LocCfg.Checks.AppServicePlan.$Lang
+$TxtStorage       = $LocCfg.Checks.StorageAccount.$Lang
 
 
 # ============================================================
-# 3. DUOMENŲ RINKIMAS
+# A. RESOURCE GROUP
 # ============================================================
 
-# A. Randame Resursų grupę
 $targetRG = Get-AzResourceGroup |
     Where-Object {
         $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern
@@ -27,27 +63,27 @@ $targetRG = Get-AzResourceGroup |
 
 
 if ($targetRG) {
+    $rgText =
+        "[$($Msg.Ok)] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
 
-    $rgText = "[OK] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
     $rgColor = "Green"
 }
 else {
+    $rgText =
+        "[$($Msg.Error)] - $($LabMsg.ResourceGroupNotFound.$Lang)"
 
-    $rgText = "[KLAIDA] - Nerasta grupė '$($LocCfg.ResourceGroupPattern)...'"
     $rgColor = "Red"
 }
 
 
-# Rezultatų masyvas
-$resourceResults = @()
-
-
 # ============================================================
-# 1. RESOURCE GROUP
+# REZULTATŲ MASYVAS
 # ============================================================
 
-$resourceResults += [PSCustomObject]@{
-    Name   = "Resursų grupė"
+$results = @()
+
+$results += [PSCustomObject]@{
+    Name   = $TxtResourceGroup
     Text   = $rgText
     Color  = $rgColor
     Indent = 0
@@ -55,7 +91,7 @@ $resourceResults += [PSCustomObject]@{
 
 
 # ============================================================
-# 2. WEB APP
+# B. WEB APP
 # ============================================================
 
 if ($targetRG) {
@@ -68,53 +104,52 @@ if ($targetRG) {
 
     if ($webApp) {
 
-        # Pagrindinė Web App eilutė
-        $resourceResults += [PSCustomObject]@{
-            Name   = "Web App (Svetainė)"
-            Text   = "[OK] - $($webApp.Name) ($($webApp.Location))"
+        # ----------------------------------------------------
+        # Web App pagrindinė eilutė
+        # ----------------------------------------------------
+
+        $results += [PSCustomObject]@{
+            Name   = $TxtWebApp
+            Text   = "[$($Msg.Ok)] - $($webApp.Name) ($($webApp.Location))"
             Color  = "Green"
             Indent = 0
         }
 
 
         # ----------------------------------------------------
-        # Runtime tikrinimas
+        # Runtime
         # ----------------------------------------------------
 
-        $runtime = $null
-
-        # Windows Web App atveju .NET versija paprastai yra
-        # SiteConfig.NetFrameworkVersion
-        if ($webApp.SiteConfig.NetFrameworkVersion) {
-
-            $runtime = $webApp.SiteConfig.NetFrameworkVersion
-        }
-
+        $runtime = $webApp.SiteConfig.NetFrameworkVersion
 
         if ($runtime) {
 
-            # Pvz. v10.0 -> .NET 10
-            $runtimeDisplay = $runtime
+            $runtimeVersion = $runtime -replace '^v', ''
 
-            if ($runtime -match '^v?10') {
-                $runtimeDisplay = ".NET 10"
-                $runtimeText = "[OK] - $runtimeDisplay"
+            if ($runtimeVersion -match "^$($LocCfg.ExpectedWebApp.Runtime)(\.|$)") {
+
+                $runtimeText =
+                    "[$($Msg.Ok)] - .NET $($LocCfg.ExpectedWebApp.Runtime)"
+
                 $runtimeColor = "Green"
             }
             else {
-                $runtimeText = "[KLAIDA] - $runtime"
+                $runtimeText =
+                    "[$($Msg.Error)] - $runtime"
+
                 $runtimeColor = "Yellow"
             }
         }
         else {
+            $runtimeText =
+                "[$($Msg.Error)] - $($LabMsg.RuntimeNotDetected.$Lang)"
 
-            $runtimeText = "[KLAIDA] - Nepavyko nustatyti"
             $runtimeColor = "Yellow"
         }
 
 
-        $resourceResults += [PSCustomObject]@{
-            Name   = "Runtime"
+        $results += [PSCustomObject]@{
+            Name   = $TxtRuntime
             Text   = $runtimeText
             Color  = $runtimeColor
             Indent = 1
@@ -122,12 +157,11 @@ if ($targetRG) {
 
 
         # ----------------------------------------------------
-        # App Service Plan tikrinimas
+        # App Service Plan
         # ----------------------------------------------------
 
         try {
 
-            # ServerFarmId paprastai baigiasi App Service Plan pavadinimu
             $planName = Split-Path $webApp.ServerFarmId -Leaf
 
             $plan = Get-AzAppServicePlan `
@@ -136,8 +170,7 @@ if ($targetRG) {
                 -ErrorAction Stop
 
 
-            # OS nustatymas
-            $planOS = if ($plan.Reserved -eq $true) {
+            $planOS = if ($plan.Reserved) {
                 "Linux"
             }
             else {
@@ -145,54 +178,53 @@ if ($targetRG) {
             }
 
 
-            # SKU
             $skuName = $plan.Sku.Name
             $skuTier = $plan.Sku.Tier
 
 
-            # D1 paprastai yra Shared tier
-            $planDisplay = "$skuTier $skuName / $planOS"
+            $planDisplay =
+                "$skuTier $skuName / $planOS"
 
 
             $planOk =
-                ($planOS -eq "Windows") -and
-                (
-                    ($skuName -eq "D1") -or
-                    ($skuTier -eq "Shared")
-                )
+                ($skuName -eq $LocCfg.ExpectedWebApp.PlanSku) -and
+                ($skuTier -eq $LocCfg.ExpectedWebApp.PlanTier) -and
+                ($planOS -eq $LocCfg.ExpectedWebApp.OperatingSystem)
 
 
             if ($planOk) {
+                $planText =
+                    "[$($Msg.Ok)] - $planDisplay"
 
-                $planText = "[OK] - $planDisplay"
                 $planColor = "Green"
             }
             else {
+                $planText =
+                    "[$($Msg.Error)] - $planDisplay"
 
-                $planText = "[KLAIDA] - $planDisplay"
                 $planColor = "Yellow"
             }
         }
         catch {
+            $planText =
+                "[$($Msg.Error)] - $($LabMsg.PlanNotDetected.$Lang)"
 
-            $planText = "[KLAIDA] - Nepavyko nustatyti App Service Plan"
             $planColor = "Yellow"
         }
 
 
-        $resourceResults += [PSCustomObject]@{
-            Name   = "App Service Plan"
+        $results += [PSCustomObject]@{
+            Name   = $TxtAppService
             Text   = $planText
             Color  = $planColor
             Indent = 1
         }
-
     }
     else {
 
-        $resourceResults += [PSCustomObject]@{
-            Name   = "Web App (Svetainė)"
-            Text   = "[TRŪKSTA] - Nerastas resursas"
+        $results += [PSCustomObject]@{
+            Name   = $TxtWebApp
+            Text   = "[$($LabMsg.MissingStatus.$Lang)] - $($LabMsg.ResourceNotFound.$Lang)"
             Color  = "Red"
             Indent = 0
         }
@@ -200,7 +232,7 @@ if ($targetRG) {
 
 
     # ========================================================
-    # 3. STORAGE ACCOUNT
+    # C. STORAGE ACCOUNT
     # ========================================================
 
     $storage = Get-AzStorageAccount `
@@ -211,20 +243,27 @@ if ($targetRG) {
 
     if ($storage) {
 
-        $storageText =
-            "[OK] - $($storage.StorageAccountName) " +
-            "($($storage.Location)) [$($storage.Sku.Name)]"
+        $storageSku = $storage.Sku.Name
 
-        $storageColor = if ($storage.Sku.Name -eq "Standard_LRS") {
-            "Green"
+        if ($storageSku -eq $LocCfg.ExpectedStorageSku) {
+            $storageColor = "Green"
+            $storageStatus = $Msg.Ok
         }
         else {
-            "Yellow"
+            $storageColor = "Yellow"
+            $storageStatus = $Msg.Error
         }
 
 
-        $resourceResults += [PSCustomObject]@{
-            Name   = "Storage Account (Saugykla)"
+        $storageText =
+            "[$storageStatus] - " +
+            "$($storage.StorageAccountName) " +
+            "($($storage.Location)) " +
+            "[$storageSku]"
+
+
+        $results += [PSCustomObject]@{
+            Name   = $TxtStorage
             Text   = $storageText
             Color  = $storageColor
             Indent = 0
@@ -232,9 +271,9 @@ if ($targetRG) {
     }
     else {
 
-        $resourceResults += [PSCustomObject]@{
-            Name   = "Storage Account (Saugykla)"
-            Text   = "[TRŪKSTA] - Nerastas resursas"
+        $results += [PSCustomObject]@{
+            Name   = $TxtStorage
+            Text   = "[$($LabMsg.MissingStatus.$Lang)] - $($LabMsg.ResourceNotFound.$Lang)"
             Color  = "Red"
             Indent = 0
         }
@@ -243,16 +282,19 @@ if ($targetRG) {
 }
 else {
 
-    $resourceResults += [PSCustomObject]@{
-        Name   = "Web App (Svetainė)"
-        Text   = "[KLAIDA] - Nėra resursų grupės"
+    # Jei nėra RG, kitų resursų netikriname
+
+    $results += [PSCustomObject]@{
+        Name   = $TxtWebApp
+        Text   = "[$($Msg.Error)] - $($LabMsg.NoResourceGroup.$Lang)"
         Color  = "Gray"
         Indent = 0
     }
 
-    $resourceResults += [PSCustomObject]@{
-        Name   = "Storage Account (Saugykla)"
-        Text   = "[KLAIDA] - Nėra resursų grupės"
+
+    $results += [PSCustomObject]@{
+        Name   = $TxtStorage
+        Text   = "[$($Msg.Error)] - $($LabMsg.NoResourceGroup.$Lang)"
         Color  = "Gray"
         Indent = 0
     }
@@ -260,24 +302,22 @@ else {
 
 
 # ============================================================
-# 4. GALUTINIS REZULTATAS
+# GALUTINIS REZULTATAS
 # ============================================================
 
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
-Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" `
-    -ForegroundColor Cyan
+Write-Host ""
+Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
 
 Write-Host "==================================================" `
     -ForegroundColor Gray
 
-Write-Host "$($Setup.HeaderTitle)"
+Write-Host $Setup.HeaderTitle
+Write-Host $LabName -ForegroundColor Yellow
 
-Write-Host "$($LocCfg.LabName)" `
-    -ForegroundColor Yellow
-
-Write-Host "Data: $date"
-Write-Host "Studentas: $($Setup.StudentEmail)"
+Write-Host "$($Msg.Date): $date"
+Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
 
 Write-Host "==================================================" `
     -ForegroundColor Gray
@@ -285,15 +325,12 @@ Write-Host "==================================================" `
 
 $mainNumber = 1
 
-foreach ($res in $resourceResults) {
+foreach ($res in $results) {
 
     if ($res.Indent -eq 1) {
-
-        # Sub-elementai po Web App
         $label = "   $($res.Name):"
     }
     else {
-
         $label = "$mainNumber. $($res.Name):"
         $mainNumber++
     }
@@ -301,16 +338,14 @@ foreach ($res in $resourceResults) {
 
     $targetWidth = 39
 
-    $neededSpaces = $targetWidth - $label.Length
+    $spaces = $targetWidth - $label.Length
 
-    if ($neededSpaces -lt 1) {
-        $neededSpaces = 1
+    if ($spaces -lt 1) {
+        $spaces = 1
     }
 
-    $padding = " " * $neededSpaces
 
-
-    Write-Host "$label$padding" -NoNewline
+    Write-Host ($label + (" " * $spaces)) -NoNewline
 
     Write-Host $res.Text `
         -ForegroundColor $res.Color

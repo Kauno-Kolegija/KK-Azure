@@ -1,17 +1,76 @@
 {
-    "LabName": "LAB 2: Azure Įrankiai ir Resursai",
-    "ResourceGroupPattern": "^RG-LAB02-",
-    "RequiredResources": [
-        { 
-            "Type": "Microsoft.Web/sites", 
-            "Name": "Web App (Svetainė)",
-            "Score": 1
-        },
-        { 
-            "Type": "Microsoft.Storage/storageAccounts", 
-            "Name": "Storage Account (Saugykla)",
-            "Score": 1
-        }
-    ],
-    "AllowedRegions": ["northeurope", "westeurope", "swedencentral", "norwayeast", "eastus", "polandcentral"]
+  "LabName": {
+    "LT": "LAB 2: Azure Įrankiai ir Resursai",
+    "EN": "LAB 2: Azure Tools and Resources"
+  },
+
+  "Checks": {
+    "ResourceGroup": {
+      "LT": "Resursų grupė",
+      "EN": "Resource Group"
+    },
+
+    "WebApp": {
+      "LT": "Web App (Svetainė)",
+      "EN": "Web App"
+    },
+
+    "Runtime": {
+      "LT": "Runtime",
+      "EN": "Runtime"
+    },
+
+    "AppServicePlan": {
+      "LT": "App Service Plan",
+      "EN": "App Service Plan"
+    },
+
+    "StorageAccount": {
+      "LT": "Storage Account (Saugykla)",
+      "EN": "Storage Account"
+    }
+  },
+
+  "Messages": {
+    "MissingStatus": {
+      "LT": "TRŪKSTA",
+      "EN": "MISSING"
+    },
+
+    "ResourceNotFound": {
+      "LT": "Nerastas resursas",
+      "EN": "Resource not found"
+    },
+
+    "ResourceGroupNotFound": {
+      "LT": "Nerasta LAB2 resursų grupė",
+      "EN": "LAB2 Resource Group not found"
+    },
+
+    "NoResourceGroup": {
+      "LT": "Nėra resursų grupės",
+      "EN": "Resource Group not found"
+    },
+
+    "RuntimeNotDetected": {
+      "LT": "Nepavyko nustatyti Runtime",
+      "EN": "Failed to detect Runtime"
+    },
+
+    "PlanNotDetected": {
+      "LT": "Nepavyko nustatyti App Service Plan",
+      "EN": "Failed to detect App Service Plan"
+    }
+  },
+
+  "ResourceGroupPattern": "^RG-LAB02-",
+
+  "ExpectedWebApp": {
+    "Runtime": "10",
+    "PlanTier": "Shared",
+    "PlanSku": "D1",
+    "OperatingSystem": "Windows"
+  },
+
+  "ExpectedStorageSku": "Standard_LRS"
 }
