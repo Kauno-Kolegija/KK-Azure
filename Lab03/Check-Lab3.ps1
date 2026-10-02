@@ -348,18 +348,15 @@ Write-Host `
 Write-Host $Setup.HeaderTitle
 
 if ($LocCfg.LabName.$Lang) {
-    Write-Host `
-        $LocCfg.LabName.$Lang `
-        -ForegroundColor Yellow
+    Write-Host $LocCfg.LabName.$Lang -ForegroundColor Yellow
 }
 else {
-    Write-Host `
-        "LAB 3" `
-        -ForegroundColor Yellow
+    Write-Host "LAB 3" -ForegroundColor Yellow
 }
 
 Write-Host "$($Setup.Messages.Date): $date"
 Write-Host "$($Setup.Messages.Student): $($Setup.StudentEmail)"
+Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
 
 Write-Host `
     "==================================================" `

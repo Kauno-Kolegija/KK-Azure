@@ -19,7 +19,8 @@
       "CheckFailed": "Nepavyko atlikti patikros",
       "ConfigLoadFailed": "Nepavyko atsisiųsti konfigūracijos (JSON).",
       "AzureNotConnected": "Neprisijungta prie Azure!",
-      "SystemIdentity": "Sisteminė tapatybė"
+      "SystemIdentity": "Sisteminė tapatybė",
+      "ScriptVersion": "Skripto versija"
     },
 
     "EN": {
@@ -33,7 +34,8 @@
       "CheckFailed": "Validation failed",
       "ConfigLoadFailed": "Failed to download configuration (JSON).",
       "AzureNotConnected": "Not connected to Azure!",
-      "SystemIdentity": "System Identity"
+      "SystemIdentity": "System Identity",
+      "ScriptVersion": "Script version"
     }
   }
 }

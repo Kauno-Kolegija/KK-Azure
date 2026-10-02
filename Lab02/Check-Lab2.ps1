@@ -373,7 +373,7 @@ Write-Host $LabName -ForegroundColor Yellow
 
 Write-Host "$($Msg.Date): $date"
 Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
-
+Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
 Write-Host "==================================================" `
     -ForegroundColor Gray
 

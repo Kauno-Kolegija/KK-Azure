@@ -1,3 +1,24 @@
+
+# ============================================================
+# Script version checker
+# ============================================================
+function Get-ScriptVersion {
+    try {
+        $commit = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/Kauno-Kolegija/KK-Azure/commits/main" `
+            -Headers @{ "User-Agent" = "KK-Azure-Lab-Checker" } `
+            -ErrorAction Stop
+
+        $shortSha = $commit.sha.Substring(0, 7)
+        $commitDate = ([datetime]$commit.commit.committer.date).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+
+        return "$shortSha ($commitDate)"
+    }
+    catch {
+        return "unknown"
+    }
+}
+
 function Initialize-Lab {
     param (
         [string]$LocalConfigUrl,
@@ -48,12 +69,15 @@ function Initialize-Lab {
     Clear-Host
     Write-Host $Msg.Running -ForegroundColor Yellow
 
+    $ScriptVersion = Get-ScriptVersion
+
     return [PSCustomObject]@{
-        GlobalConfig = $GlobalConfig
-        LocalConfig  = $LocalConfig
-        StudentEmail = $StudentEmail
-        HeaderTitle  = "$($GlobalConfig.KaunoKolegija) | $($GlobalConfig.ModuleName.$Lang)"
-        Language     = $Lang
-        Messages     = $Msg
+        GlobalConfig  = $GlobalConfig
+        LocalConfig   = $LocalConfig
+        StudentEmail  = $StudentEmail
+        HeaderTitle   = "$($GlobalConfig.KaunoKolegija) | $($GlobalConfig.ModuleName.$Lang)"
+        Language      = $Lang
+        Messages      = $Msg
+        ScriptVersion = $ScriptVersion
     }
 }

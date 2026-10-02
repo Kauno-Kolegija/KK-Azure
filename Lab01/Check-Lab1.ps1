@@ -274,6 +274,7 @@ Write-Host $Setup.HeaderTitle
 Write-Host $LabName -ForegroundColor Yellow
 Write-Host "$($Msg.Date): $date"
 Write-Host "$($Msg.Student): $studentEmail"
+Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
 Write-Host "==================================================" -ForegroundColor Gray
 
 Write-Host ("1. {0,-27}" -f ($TxtAccount + ":")) -NoNewline
