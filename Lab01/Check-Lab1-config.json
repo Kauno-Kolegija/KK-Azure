@@ -23,6 +23,11 @@
     "Budget": {
       "LT": "Budget tikrinimas",
       "EN": "Budget check"
+    },
+
+    "AllowedLocations": {
+      "LT": "Leidžiami regionai",
+      "EN": "Allowed regions"
     }
   },
 
@@ -80,23 +85,23 @@
     "BudgetCheckFailed": {
       "LT": "Nepavyko patikrinti Budget",
       "EN": "Failed to check Budget"
-    }
-  },
+    },
 
-  "AllowedLocations": {
-  "LT": "Leidžiami regionai",
-  "EN": "Allowed regions"
-  },
-  "AllowedLocationsNotFound": {
-  "LT": "Leidžiamų regionų sąrašo rasti nepavyko",
-  "EN": "Allowed region list could not be found"
-  },
-  "AllowedLocationsCheckFailed": {
-    "LT": "Nepavyko nuskaityti leidžiamų regionų",
-    "EN": "Failed to read allowed regions"
+    "AllowedLocationsNotFound": {
+      "LT": "Leidžiamų regionų sąrašo rasti nepavyko",
+      "EN": "Allowed region list could not be found"
+    },
+
+    "AllowedLocationsCheckFailed": {
+      "LT": "Nepavyko nuskaityti leidžiamų regionų",
+      "EN": "Failed to read allowed regions"
+    }
   },
 
   "RoleToCheck": "Contributor",
 
-  "NamingPattern": "^[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-?[0-9]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-[A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž]+$"
+  "NamingPatterns": {
+    "LT": "^[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+-?[0-9]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž-]+-[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž-]+$",
+    "EN": "^Erasmus-[A-Za-z-]+-[A-Za-z-]+$"
+  }
 }
