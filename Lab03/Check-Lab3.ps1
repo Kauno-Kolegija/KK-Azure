@@ -337,30 +337,15 @@ else {
 
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
-Write-Host `
-    "`n--- $($Setup.Messages.FinalResult) ---" `
-    -ForegroundColor Cyan
-
-Write-Host `
-    "==================================================" `
-    -ForegroundColor Gray
-
+Write-Host ""
+Write-Host "--- $($GlobalMsg.FinalResult) ---" -ForegroundColor Cyan
+Write-Host "==================================================" -ForegroundColor Gray
 Write-Host $Setup.HeaderTitle
-
-if ($LocCfg.LabName.$Lang) {
-    Write-Host $LocCfg.LabName.$Lang -ForegroundColor Yellow
-}
-else {
-    Write-Host "LAB 3" -ForegroundColor Yellow
-}
-
-Write-Host "$($Setup.Messages.Date): $date"
-Write-Host "$($Setup.Messages.Student): $($Setup.StudentEmail)"
-Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
-
-Write-Host `
-    "==================================================" `
-    -ForegroundColor Gray
+Write-Host $LocCfg.LabName.$Lang -ForegroundColor Yellow
+Write-Host "$($GlobalMsg.Date): $date"
+Write-Host "$($GlobalMsg.Student): $($Setup.StudentEmail)"
+Write-Host "$($GlobalMsg.ScriptVersion): $($Setup.ScriptVersion)"
+Write-Host "==================================================" -ForegroundColor Gray
 
 # ============================================================
 # 6. REZULTATŲ FORMATAVIMAS
