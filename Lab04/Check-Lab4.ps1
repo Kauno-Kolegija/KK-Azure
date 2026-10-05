@@ -25,12 +25,15 @@ $Setup = Initialize-Lab `
     -Lang $Lang
 
 $LocCfg  = $Setup.LocalConfig
+$Check   = $LocCfg.Checks
+$LabMsg  = $LocCfg.Messages
 $Msg     = $Setup.Messages
-$LabName = $LocCfg.LabName
+$LabName = $LocCfg.LabName.$Lang
 
 $OkStatus      = $Msg.Ok
 $ErrorStatus   = $Msg.Error
-$MissingStatus = "TRŪKSTA"
+$MissingStatus = $LabMsg.Missing.$Lang
+$WarningStatus = $LabMsg.Warning.$Lang
 
 $resourceResults = @()
 
@@ -114,10 +117,11 @@ $rgWarehouse = $allRGs |
 $foundRGs = @($rgInfra, $rgAdmin, $rgWarehouse | Where-Object { $_ }).Count
 
 if ($rgInfra -and $rgAdmin -and $rgWarehouse) {
-    Add-Result "Resursų grupės" "[$OkStatus] - 3/3" "Green"
+    Add-Result $Check.ResourceGroups.$Lang "[$OkStatus] - 3/3" "Green"
 }
 else {
-    Add-Result "Resursų grupės" "[$ErrorStatus] - Rasta $foundRGs/3" "Red"
+    $text = $LabMsg.FoundGroups.$Lang -f $foundRGs
+    Add-Result $Check.ResourceGroups.$Lang "[$ErrorStatus] - $text" "Red"
 }
 
 # ============================================================
@@ -143,70 +147,73 @@ if ($vnetAdmin) {
 
     if (-not $adminAddressOk) {
         $actual = $vnetAdmin.AddressSpace.AddressPrefixes -join ", "
-        Add-Result "VNet-Admin" "[$ErrorStatus] - Adresacija: $actual" "Red"
+        Add-Result $Check.VNetAdmin.$Lang "[$ErrorStatus] - Address space: $actual" "Red"
     }
     else {
         $details = @()
         $hasWarning = $false
 
         if ($frontEnd -and $frontEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.FrontEnd.Prefix) {
-            $details += "FE $($frontEnd.AddressPrefix)"
+            $details += "FrontEnd $($frontEnd.AddressPrefix)"
         }
         else {
-            $details += "FE neteisingas"
+            $details += "FrontEnd $($LabMsg.SubnetIncorrect.$Lang)"
             $hasWarning = $true
         }
 
         if ($backEnd -and $backEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.BackEnd.Prefix) {
-            $details += "BE $($backEnd.AddressPrefix)"
+            $details += "BackEnd $($backEnd.AddressPrefix)"
         }
         else {
-            $details += "BE neteisingas"
+            $details += "BackEnd $($LabMsg.SubnetIncorrect.$Lang)"
             $hasWarning = $true
         }
 
         if ($hasWarning) {
-            Add-Result "VNet-Admin" "[$WarningStatus] - $($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" "Yellow"
+            Add-Result $Check.VNetAdmin.$Lang "[$WarningStatus] - $($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" "Yellow"
         }
         else {
-            Add-Result "VNet-Admin" "[$OkStatus] - $($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" "Green"
+            Add-Result $Check.VNetAdmin.$Lang "[$OkStatus] - $($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" "Green"
         }
     }
 }
 else {
-    Add-Result "VNet-Admin" "[$MissingStatus] - Tinklas nerastas" "Red"
+    Add-Result $Check.VNetAdmin.$Lang "[$MissingStatus] - $($LabMsg.NetworkNotFound.$Lang)" "Red"
 }
 
 # ============================================================
-# C. VNET-SANDELIS
+# C. VNET-WAREHOUSE / VNET-SANDELIS
 # ============================================================
 
+$warehouseVnetName = $LocCfg.Networks.Warehouse.Names.$Lang
+$warehouseSubnetName = $LocCfg.Networks.Warehouse.Subnets.Servers.Names.$Lang
+
 $vnetWarehouse = $allVNets |
-    Where-Object Name -EQ $LocCfg.Networks.Warehouse.Name |
+    Where-Object Name -EQ $warehouseVnetName |
     Select-Object -First 1
 
 if ($vnetWarehouse) {
     $warehouseAddressOk = $vnetWarehouse.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Warehouse.AddressSpace
 
     $serverSubnet = $vnetWarehouse.Subnets |
-        Where-Object Name -EQ $LocCfg.Networks.Warehouse.Subnets.Servers.Name |
+        Where-Object Name -EQ $warehouseSubnetName |
         Select-Object -First 1
 
     if (-not $warehouseAddressOk) {
         $actual = $vnetWarehouse.AddressSpace.AddressPrefixes -join ", "
-        Add-Result "VNet-Sandelis" "[$ErrorStatus] - Adresacija: $actual" "Red"
+        Add-Result $Check.VNetWarehouse.$Lang "[$ErrorStatus] - Address space: $actual" "Red"
     }
     else {
         if ($serverSubnet -and $serverSubnet.AddressPrefix -eq $LocCfg.Networks.Warehouse.Subnets.Servers.Prefix) {
-            Add-Result "VNet-Sandelis" "[$OkStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($serverSubnet.AddressPrefix)" "Green"
+            Add-Result $Check.VNetWarehouse.$Lang "[$OkStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($serverSubnet.AddressPrefix)" "Green"
         }
         else {
-            Add-Result "VNet-Sandelis" "[$WarningStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers neteisingas" "Yellow"
+            Add-Result $Check.VNetWarehouse.$Lang "[$WarningStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($LabMsg.SubnetIncorrect.$Lang)" "Yellow"
         }
     }
 }
 else {
-    Add-Result "VNet-Sandelis" "[$MissingStatus] - Tinklas nerastas" "Red"
+    Add-Result $Check.VNetWarehouse.$Lang "[$MissingStatus] - $($LabMsg.NetworkNotFound.$Lang)" "Red"
 }
 
 # ============================================================
@@ -219,8 +226,10 @@ $vmAdmin = $allVMs |
     Where-Object Name -EQ $LocCfg.VirtualMachines.Admin |
     Select-Object -First 1
 
+$warehouseVmName = $LocCfg.VirtualMachines.Warehouse.$Lang
+
 $vmWarehouse = $allVMs |
-    Where-Object Name -EQ $LocCfg.VirtualMachines.Warehouse |
+    Where-Object Name -EQ $warehouseVmName |
     Select-Object -First 1
 
 $nicAdmin = Get-NicFromVM $vmAdmin
@@ -234,14 +243,14 @@ if ($vmAdmin -and $nicAdmin) {
     $correctSubnet = $adminSubnetId -match "/virtualNetworks/VNet-Admin/subnets/VNet-Admin-FrontEnd$"
 
     if ($correctRG -and $correctSubnet) {
-        Add-Result "VM-Admin" "[$OkStatus] - $adminIp" "Green"
+        Add-Result $Check.VmAdmin.$Lang "[$OkStatus] - $adminIp" "Green"
     }
     else {
-        Add-Result "VM-Admin" "[$ErrorStatus] - Netinkama RG arba potinklis ($adminIp)" "Red"
+        Add-Result $Check.VmAdmin.$Lang "[$ErrorStatus] - $($LabMsg.WrongRgOrSubnet.$Lang) ($adminIp)" "Red"
     }
 }
 else {
-    Add-Result "VM-Admin" "[$MissingStatus] - Serveris nerastas" "Red"
+    Add-Result $Check.VmAdmin.$Lang "[$MissingStatus] - $($LabMsg.ServerNotFound.$Lang)" "Red"
 }
 
 if ($vmWarehouse -and $nicWarehouse) {
@@ -249,17 +258,20 @@ if ($vmWarehouse -and $nicWarehouse) {
     $warehouseSubnetId = $nicWarehouse.IpConfigurations[0].Subnet.Id
 
     $correctRG = $vmWarehouse.ResourceGroupName -match $LocCfg.ResourceGroups.Warehouse
-    $correctSubnet = $warehouseSubnetId -match "/virtualNetworks/VNet-Sandelis/subnets/VNet-Sandelis-Servers$"
+    $escapedVnet = [regex]::Escape($warehouseVnetName)
+    $escapedSubnet = [regex]::Escape($warehouseSubnetName)
+
+    $correctSubnet = $warehouseSubnetId -match "/virtualNetworks/$escapedVnet/subnets/$escapedSubnet$"
 
     if ($correctRG -and $correctSubnet) {
-        Add-Result "VM-Sandelis" "[$OkStatus] - $warehouseIp" "Green"
+        Add-Result $Check.VmWarehouse.$Lang "[$OkStatus] - $warehouseIp" "Green"
     }
     else {
-        Add-Result "VM-Sandelis" "[$ErrorStatus] - Netinkama RG arba potinklis ($warehouseIp)" "Red"
+        Add-Result $Check.VmWarehouse.$Lang "[$ErrorStatus] - $($LabMsg.WrongRgOrSubnet.$Lang) ($warehouseIp)" "Red"
     }
 }
 else {
-    Add-Result "VM-Sandelis" "[$MissingStatus] - Serveris nerastas" "Red"
+    Add-Result $Check.VmWarehouse.$Lang "[$MissingStatus] - $($LabMsg.ServerNotFound.$Lang)" "Red"
 }
 
 # ============================================================
@@ -282,14 +294,14 @@ if ($vnetAdmin -and $vnetWarehouse) {
         Select-Object -First 1
 
     if ($adminToWarehouse -and $warehouseToAdmin) {
-        Add-Result "VNet Peering" "[$OkStatus] - Connected" "Green"
+        Add-Result $Check.Peering.$Lang "[$OkStatus] - $($LabMsg.PeeringConnected.$Lang)" "Green"
     }
     else {
-        Add-Result "VNet Peering" "[$ErrorStatus] - Peering nesujungtas abiem kryptimis" "Red"
+        Add-Result $Check.Peering.$Lang "[$ErrorStatus] - $($LabMsg.PeeringNotConnected.$Lang)" "Red"
     }
 }
 else {
-    Add-Result "VNet Peering" "[$MissingStatus] - Trūksta VNet" "Red"
+    Add-Result $Check.Peering.$Lang "[$MissingStatus] - $($LabMsg.MissingVnet.$Lang)" "Red"
 }
 
 # ============================================================
@@ -304,25 +316,27 @@ if ($asg -and $nicWarehouse) {
     $asgIds = @($nicWarehouse.IpConfigurations.ApplicationSecurityGroups.Id)
 
     if ($asgIds -contains $asg.Id) {
-        Add-Result "ASG-DB-Servers" "[$OkStatus] - VM-Sandelis priskirtas" "Green"
+        Add-Result $Check.Asg.$Lang "[$OkStatus] - $($LabMsg.VmAssigned.$Lang)" "Green"
     }
     else {
-        Add-Result "ASG-DB-Servers" "[$ErrorStatus] - VM-Sandelis nepriskirtas" "Red"
+        Add-Result $Check.Asg.$Lang "[$ErrorStatus] - $($LabMsg.VmNotAssigned.$Lang)" "Red"
     }
 }
 elseif ($asg) {
-    Add-Result "ASG-DB-Servers" "[$ErrorStatus] - ASG yra, VM nerasta" "Red"
+    Add-Result $Check.Asg.$Lang "[$ErrorStatus] - $($LabMsg.AsgVmMissing.$Lang)" "Red"
 }
 else {
-    Add-Result "ASG-DB-Servers" "[$MissingStatus] - ASG nerasta" "Red"
+    Add-Result $Check.Asg.$Lang "[$MissingStatus] - $($LabMsg.AsgMissing.$Lang)" "Red"
 }
 
 # ============================================================
 # G. SUBNET NSG
 # ============================================================
 
+$subnetNsgName = $LocCfg.SubnetNSG.Names.$Lang
+
 $subnetNsg = Get-AzNetworkSecurityGroup -ErrorAction SilentlyContinue |
-    Where-Object Name -EQ $LocCfg.SubnetNSG.Name |
+    Where-Object Name -EQ $subnetNsgName |
     Select-Object -First 1
 
 $subnetNsgAssociated = $false
@@ -332,10 +346,10 @@ if ($serverSubnet -and $serverSubnet.NetworkSecurityGroup -and $subnetNsg) {
 }
 
 if (-not $subnetNsg) {
-    Add-Result "Subnet NSG" "[$MissingStatus] - $($LocCfg.SubnetNSG.Name)" "Red"
+    Add-Result $Check.SubnetNsg.$Lang "[$MissingStatus] - $subnetNsgName" "Red"
 }
 elseif (-not $subnetNsgAssociated) {
-    Add-Result "Subnet NSG" "[$ErrorStatus] - NSG nepriskirta VNet-Sandelis-Servers" "Red"
+    Add-Result $Check.SubnetNsg.$Lang "[$ErrorStatus] - $($LabMsg.SubnetNsgNotAssociated.$Lang)" "Red"
 }
 else {
     $sqlRule = $subnetNsg.SecurityRules |
@@ -345,7 +359,6 @@ else {
     $sqlPortOk = Test-PortRule $sqlRule $LocCfg.SubnetNSG.SqlRule.Port
 
     $sqlAsgOk = $false
-
     if ($sqlRule -and $asg) {
         $sqlAsgIds = @($sqlRule.DestinationApplicationSecurityGroups.Id)
         $sqlAsgOk = $sqlAsgIds -contains $asg.Id
@@ -362,11 +375,12 @@ else {
         Where-Object Name -EQ $LocCfg.SubnetNSG.PingRule.Name |
         Select-Object -First 1
 
-    $pingProtocolOk =
-        $pingRule.Protocol -in @("Icmp", "IcmpV4")
+    $pingProtocolOk = $false
+    if ($pingRule) {
+        $pingProtocolOk = $pingRule.Protocol -in @("Icmp", "IcmpV4", "ICMP", "ICMPv4")
+    }
 
     $pingAsgOk = $false
-
     if ($pingRule -and $asg) {
         $pingAsgIds = @($pingRule.DestinationApplicationSecurityGroups.Id)
         $pingAsgOk = $pingAsgIds -contains $asg.Id
@@ -380,7 +394,7 @@ else {
         $pingAsgOk
 
     if ($sqlOk -and $pingOk) {
-        Add-Result "Subnet NSG" "[$OkStatus] - Allow-SQL, Allow-Ping" "Green"
+        Add-Result $Check.SubnetNsg.$Lang "[$OkStatus] - Allow-SQL, Allow-Ping" "Green"
     }
     else {
         $problems = @()
@@ -388,7 +402,7 @@ else {
         if (-not $sqlOk) { $problems += "Allow-SQL" }
         if (-not $pingOk) { $problems += "Allow-Ping" }
 
-        Add-Result "Subnet NSG" "[$ErrorStatus] - Patikrinkite: $($problems -join ', ')" "Red"
+        Add-Result $Check.SubnetNsg.$Lang "[$ErrorStatus] - $($LabMsg.CheckRules.$Lang): $($problems -join ', ')" "Red"
     }
 }
 
@@ -418,17 +432,17 @@ if ($nicWarehouse -and $nicWarehouse.NetworkSecurityGroup) {
         $denyPortOk
 
     if ($denyOk) {
-        Add-Result "VM NSG" "[$OkStatus] - Deny-SQL-LocalServer (1433, Priority 400)" "Green"
+        Add-Result $Check.VmNsg.$Lang "[$OkStatus] - Deny-SQL-LocalServer (1433, Priority 400)" "Green"
     }
     else {
-        Add-Result "VM NSG" "[$ErrorStatus] - Netinkama Deny-SQL-LocalServer taisyklė" "Red"
+        Add-Result $Check.VmNsg.$Lang "[$ErrorStatus] - $($LabMsg.WrongDenyRule.$Lang)" "Red"
     }
 }
 elseif ($nicWarehouse) {
-    Add-Result "VM NSG" "[$MissingStatus] - VM-Sandelis NIC neturi NSG" "Red"
+    Add-Result $Check.VmNsg.$Lang "[$MissingStatus] - $($LabMsg.NicNoNsg.$Lang)" "Red"
 }
 else {
-    Add-Result "VM NSG" "[$MissingStatus] - VM-Sandelis nerastas" "Red"
+    Add-Result $Check.VmNsg.$Lang "[$MissingStatus] - $($LabMsg.ServerNotFound.$Lang)" "Red"
 }
 
 # ============================================================
@@ -454,13 +468,8 @@ Write-Host "==================================================" -ForegroundColor
 $i = 1
 
 foreach ($res in $resourceResults) {
-    if ($res.Name -match "^ -") {
-        $label = "   $($res.Name):"
-    }
-    else {
-        $label = "$i. $($res.Name):"
-        $i++
-    }
+    $label = "$i. $($res.Name):"
+    $i++
 
     $targetWidth = 30
     $neededSpaces = $targetWidth - $label.Length

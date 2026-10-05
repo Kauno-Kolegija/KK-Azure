@@ -1,5 +1,122 @@
 {
-  "LabName": "LAB 4: Tinklo paslaugos (GUI)",
+  "LabName": {
+    "LT": "LAB 4: Tinklo paslaugos (GUI)",
+    "EN": "LAB 4: Network Services (GUI)"
+  },
+
+  "Checks": {
+    "ResourceGroups": {
+      "LT": "Resursų grupės",
+      "EN": "Resource Groups"
+    },
+    "VNetAdmin": {
+      "LT": "VNet-Admin",
+      "EN": "VNet-Admin"
+    },
+    "VNetWarehouse": {
+      "LT": "VNet-Sandelis",
+      "EN": "VNet-Warehouse"
+    },
+    "VmAdmin": {
+      "LT": "VM-Admin",
+      "EN": "VM-Admin"
+    },
+    "VmWarehouse": {
+      "LT": "VM-Sandelis",
+      "EN": "VM-Warehouse"
+    },
+    "Peering": {
+      "LT": "VNet Peering",
+      "EN": "VNet Peering"
+    },
+    "Asg": {
+      "LT": "ASG-DB-Servers",
+      "EN": "ASG-DB-Servers"
+    },
+    "SubnetNsg": {
+      "LT": "Subnet NSG",
+      "EN": "Subnet NSG"
+    },
+    "VmNsg": {
+      "LT": "VM NSG",
+      "EN": "VM NSG"
+    }
+  },
+
+  "Messages": {
+    "Missing": {
+      "LT": "TRŪKSTA",
+      "EN": "MISSING"
+    },
+    "Warning": {
+      "LT": "ĮSPĖJIMAS",
+      "EN": "WARNING"
+    },
+    "FoundGroups": {
+      "LT": "Rasta {0}/3",
+      "EN": "Found {0}/3"
+    },
+    "NetworkNotFound": {
+      "LT": "Tinklas nerastas",
+      "EN": "Network not found"
+    },
+    "SubnetIncorrect": {
+      "LT": "neteisingas",
+      "EN": "incorrect"
+    },
+    "ServerNotFound": {
+      "LT": "Serveris nerastas",
+      "EN": "Server not found"
+    },
+    "WrongRgOrSubnet": {
+      "LT": "Netinkama RG arba potinklis",
+      "EN": "Incorrect Resource Group or subnet"
+    },
+    "PeeringConnected": {
+      "LT": "Connected",
+      "EN": "Connected"
+    },
+    "PeeringNotConnected": {
+      "LT": "Peering nesujungtas abiem kryptimis",
+      "EN": "Peering is not connected in both directions"
+    },
+    "MissingVnet": {
+      "LT": "Trūksta VNet",
+      "EN": "VNet missing"
+    },
+    "VmAssigned": {
+      "LT": "VM-Sandelis priskirtas",
+      "EN": "VM-Warehouse assigned"
+    },
+    "VmNotAssigned": {
+      "LT": "VM-Sandelis nepriskirtas",
+      "EN": "VM-Warehouse not assigned"
+    },
+    "AsgMissing": {
+      "LT": "ASG nerasta",
+      "EN": "ASG not found"
+    },
+    "AsgVmMissing": {
+      "LT": "ASG yra, VM nerasta",
+      "EN": "ASG exists, VM not found"
+    },
+    "SubnetNsgNotAssociated": {
+      "LT": "NSG nepriskirta VNet-Sandelis-Servers",
+      "EN": "NSG is not associated with VNet-Warehouse-Servers"
+    },
+    "CheckRules": {
+      "LT": "Patikrinkite",
+      "EN": "Check"
+    },
+    "NicNoNsg": {
+      "LT": "VM-Sandelis NIC neturi NSG",
+      "EN": "VM-Warehouse NIC has no NSG"
+    },
+    "WrongDenyRule": {
+      "LT": "Netinkama Deny-SQL-LocalServer taisyklė",
+      "EN": "Incorrect Deny-SQL-LocalServer rule"
+    }
+  },
 
   "ResourceGroups": {
     "Infrastructure": "^RG-LAB04-.+-Infrastruktura$",
@@ -24,11 +141,17 @@
     },
 
     "Warehouse": {
-      "Name": "VNet-Sandelis",
+      "Names": {
+        "LT": "VNet-Sandelis",
+        "EN": "VNet-Warehouse"
+      },
       "AddressSpace": "10.20.0.0/16",
       "Subnets": {
         "Servers": {
-          "Name": "VNet-Sandelis-Servers",
+          "Names": {
+            "LT": "VNet-Sandelis-Servers",
+            "EN": "VNet-Warehouse-Servers"
+          },
           "Prefix": "10.20.1.0/24"
         }
       }
@@ -37,13 +160,19 @@
 
   "VirtualMachines": {
     "Admin": "VM-Admin",
-    "Warehouse": "VM-Sandelis"
+    "Warehouse": {
+      "LT": "VM-Sandelis",
+      "EN": "VM-Warehouse"
+    }
   },
 
   "ApplicationSecurityGroup": "ASG-DB-Servers",
 
   "SubnetNSG": {
-    "Name": "NSG-Sandelis-Subnet",
+    "Names": {
+      "LT": "NSG-Sandelis-Subnet",
+      "EN": "NSG-Warehouse-Subnet"
+    },
     "SqlRule": {
       "Name": "Allow-SQL",
       "Port": "1433",
