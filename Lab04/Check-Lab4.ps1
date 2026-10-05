@@ -419,8 +419,10 @@ if ($nicWarehouse -and $nicWarehouse.NetworkSecurityGroup) {
         -Name $parts[-1] `
         -ErrorAction SilentlyContinue
 
+    $denyRuleName = $LocCfg.VmNSG.Rule.Name.$Lang
+
     $denyRule = $vmNsg.SecurityRules |
-        Where-Object Name -EQ $LocCfg.VmNSG.Rule.Name |
+        Where-Object Name -EQ $denyRuleName |
         Select-Object -First 1
 
     $denyPortOk = Test-PortRule $denyRule $LocCfg.VmNSG.Rule.Port
@@ -432,7 +434,7 @@ if ($nicWarehouse -and $nicWarehouse.NetworkSecurityGroup) {
         $denyPortOk
 
     if ($denyOk) {
-        Add-Result $Check.VmNsg.$Lang "[$OkStatus] - Deny-SQL-LocalServer (1433, Priority 400)" "Green"
+        Add-Result $Check.VmNsg.$Lang "[$OkStatus] - $denyRuleName (1433, Priority 400)" "Green"
     }
     else {
         Add-Result $Check.VmNsg.$Lang "[$ErrorStatus] - $($LabMsg.WrongDenyRule.$Lang)" "Red"

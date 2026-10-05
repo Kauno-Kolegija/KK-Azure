@@ -188,7 +188,10 @@
 
   "VmNSG": {
     "Rule": {
-      "Name": "Deny-SQL-LocalServer",
+      "Name": {
+        "LT": "Deny-SQL-LocalServer",
+        "EN": "Deny-SQL-Local"
+      },
       "Port": "1433",
       "Access": "Deny",
       "Priority": 400
