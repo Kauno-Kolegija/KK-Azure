@@ -1,8 +1,209 @@
 {
-  "LabName": "LAB 5: Tinklo paslaugos (CLI)",
-  "ResourceGroupPattern": "RG-LAB05",
-  "RequiredResources": [
-    { "Type": "Microsoft.Network/loadBalancers", "Name": "Load Balancer" },
-    { "Type": "Microsoft.Compute/availabilitySets", "Name": "Availability Set" }
-  ]
+  "LabName": {
+    "LT": "LAB 5: Tinklo paslaugos (CLI)",
+    "EN": "LAB 5: Network Services (CLI)"
+  },
+
+  "Checks": {
+    "ResourceGroup": {
+      "LT": "Resursų grupė",
+      "EN": "Resource Group"
+    },
+    "VNet": {
+      "LT": "Virtualus tinklas",
+      "EN": "Virtual Network"
+    },
+    "NSG": {
+      "LT": "Network Security Group",
+      "EN": "Network Security Group"
+    },
+    "AvailabilitySet": {
+      "LT": "Availability Set",
+      "EN": "Availability Set"
+    },
+    "VM1": {
+      "LT": "Virtualus serveris VM-001",
+      "EN": "Virtual Machine VM-001"
+    },
+    "VM2": {
+      "LT": "Virtualus serveris VM-002",
+      "EN": "Virtual Machine VM-002"
+    },
+    "LoadBalancer": {
+      "LT": "Load Balancer",
+      "EN": "Load Balancer"
+    },
+    "LoadBalancerConfig": {
+      "LT": "Load Balancer konfigūracija",
+      "EN": "Load Balancer configuration"
+    },
+    "BackendPool": {
+      "LT": "Backend Pool",
+      "EN": "Backend Pool"
+    },
+    "Tags": {
+      "LT": "Resursų žymės",
+      "EN": "Resource Tags"
+    }
+  },
+
+  "Messages": {
+    "Missing": {
+      "LT": "TRŪKSTA",
+      "EN": "MISSING"
+    },
+    "Warning": {
+      "LT": "ĮSPĖJIMAS",
+      "EN": "WARNING"
+    },
+    "NotFound": {
+      "LT": "Nerasta",
+      "EN": "Not found"
+    },
+    "WrongAddressSpace": {
+      "LT": "Netinkama adresų erdvė",
+      "EN": "Incorrect address space"
+    },
+    "WrongSubnet": {
+      "LT": "Netinkamas WebSubnet",
+      "EN": "Incorrect WebSubnet"
+    },
+    "NsgNotAssociated": {
+      "LT": "NSG nepriskirta WebSubnet",
+      "EN": "NSG is not associated with WebSubnet"
+    },
+    "WrongNsgRules": {
+      "LT": "Patikrinkite Allow_WEB / Allow_RDP taisykles",
+      "EN": "Check Allow_WEB / Allow_RDP rules"
+    },
+    "DuplicatePriority": {
+      "LT": "NSG taisyklių prioritetai turi būti skirtingi",
+      "EN": "NSG rule priorities must be different"
+    },
+    "WrongAvailabilitySet": {
+      "LT": "Netinkama Availability Set konfigūracija",
+      "EN": "Incorrect Availability Set configuration"
+    },
+    "WrongVmNetwork": {
+      "LT": "VM nėra WebSubnet",
+      "EN": "VM is not connected to WebSubnet"
+    },
+    "WrongVmAvailabilitySet": {
+      "LT": "VM nepriskirta Availability Set",
+      "EN": "VM is not assigned to Availability Set"
+    },
+    "WrongLoadBalancer": {
+      "LT": "Netinkama Load Balancer konfigūracija",
+      "EN": "Incorrect Load Balancer configuration"
+    },
+    "WrongBackendPool": {
+      "LT": "Backend Pool neturi abiejų serverių",
+      "EN": "Backend Pool does not contain both servers"
+    },
+    "WrongProbe": {
+      "LT": "Netinkamas WebHealthProbe",
+      "EN": "Incorrect WebHealthProbe"
+    },
+    "WrongRule": {
+      "LT": "Netinkama myHTTPRule taisyklė",
+      "EN": "Incorrect myHTTPRule rule"
+    },
+    "TagsMissing": {
+      "LT": "Trūksta privalomų žymių",
+      "EN": "Required tags are missing"
+    }
+  },
+
+  "ResourceGroup": {
+    "Pattern": "^RG-LAB05-.+$"
+  },
+
+  "Network": {
+    "VNetPattern": "^.+-VNet$",
+    "AddressSpace": "10.15.0.0/16",
+    "Subnet": {
+      "Name": "WebSubnet",
+      "Prefix": "10.15.0.0/24"
+    }
+  },
+
+  "NSG": {
+    "NamePattern": "^.+-NSG$",
+
+    "WebRule": {
+      "Name": "Allow_WEB",
+      "Protocol": "Tcp",
+      "DestinationPort": "80",
+      "Access": "Allow"
+    },
+
+    "RdpRule": {
+      "Name": "Allow_RDP",
+      "Protocol": "Tcp",
+      "DestinationPort": "3389",
+      "Access": "Allow"
+    },
+
+    "Priority": {
+      "Minimum": 100,
+      "Maximum": 4096,
+      "MustBeUnique": true
+    }
+  },
+
+  "AvailabilitySet": {
+    "NamePattern": "^.+-AvailabilitySet$",
+    "FaultDomains": 2,
+    "UpdateDomains": 2
+  },
+
+  "VirtualMachines": {
+    "VM1Pattern": "^.+-VM-001$",
+    "VM2Pattern": "^.+-VM-002$"
+  },
+
+  "LoadBalancer": {
+    "NamePattern": "^.+-NLB$",
+    "Sku": "Standard",
+
+    "PublicIPPattern": "^.+-NLB-PublicIP$",
+
+    "Frontend": {
+      "Name": "NLBFrontEnd"
+    },
+
+    "BackendPool": {
+      "Name": "WEBServerPool",
+      "RequiredMembers": 2
+    },
+
+    "Probe": {
+      "Name": "WebHealthProbe",
+      "Protocol": "Tcp",
+      "Port": 80
+    },
+
+    "Rule": {
+      "Name": "myHTTPRule",
+      "Protocol": "Tcp",
+      "FrontendPort": 80,
+      "BackendPort": 80,
+      "FrontendName": "NLBFrontEnd",
+      "BackendPoolName": "WEBServerPool",
+      "ProbeName": "WebHealthProbe"
+    }
+  },
+
+  "Tags": {
+    "VirtualMachines": {
+      "Environment": "Production",
+      "CreatedByRequired": true,
+      "NLBRequired": true
+    },
+
+    "VNet": {
+      "Lab": "Networking",
+      "Environment": "Production"
+    }
+  }
 }
