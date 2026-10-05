@@ -133,40 +133,44 @@ $vnetAdmin = $allVNets |
 if ($vnetAdmin) {
     $adminAddressOk = $vnetAdmin.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Admin.AddressSpace
 
-    if ($adminAddressOk) {
-        Add-Result "VNet-Admin" "[$OkStatus] - $($LocCfg.Networks.Admin.AddressSpace)" "Green"
-    }
-    else {
-        $actual = $vnetAdmin.AddressSpace.AddressPrefixes -join ", "
-        Add-Result "VNet-Admin" "[$ErrorStatus] - Adresacija: $actual" "Red"
-    }
-
     $frontEnd = $vnetAdmin.Subnets |
         Where-Object Name -EQ $LocCfg.Networks.Admin.Subnets.FrontEnd.Name |
         Select-Object -First 1
-
-    if ($frontEnd -and $frontEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.FrontEnd.Prefix) {
-        Add-Result " - FrontEnd" "[$OkStatus] - $($frontEnd.AddressPrefix)" "Green"
-    }
-    elseif ($frontEnd) {
-        Add-Result " - FrontEnd" "[$ErrorStatus] - $($frontEnd.AddressPrefix)" "Red"
-    }
-    else {
-        Add-Result " - FrontEnd" "[$MissingStatus] - Potinklis nerastas" "Red"
-    }
 
     $backEnd = $vnetAdmin.Subnets |
         Where-Object Name -EQ $LocCfg.Networks.Admin.Subnets.BackEnd.Name |
         Select-Object -First 1
 
-    if ($backEnd -and $backEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.BackEnd.Prefix) {
-        Add-Result " - BackEnd" "[$OkStatus] - $($backEnd.AddressPrefix)" "Green"
-    }
-    elseif ($backEnd) {
-        Add-Result " - BackEnd" "[$ErrorStatus] - $($backEnd.AddressPrefix)" "Red"
+    if (-not $adminAddressOk) {
+        $actual = $vnetAdmin.AddressSpace.AddressPrefixes -join ", "
+        Add-Result "VNet-Admin" "[$ErrorStatus] - Adresacija: $actual" "Red"
     }
     else {
-        Add-Result " - BackEnd" "[$MissingStatus] - Potinklis nerastas" "Red"
+        $details = @()
+        $hasWarning = $false
+
+        if ($frontEnd -and $frontEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.FrontEnd.Prefix) {
+            $details += "FE $($frontEnd.AddressPrefix)"
+        }
+        else {
+            $details += "FE neteisingas"
+            $hasWarning = $true
+        }
+
+        if ($backEnd -and $backEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.BackEnd.Prefix) {
+            $details += "BE $($backEnd.AddressPrefix)"
+        }
+        else {
+            $details += "BE neteisingas"
+            $hasWarning = $true
+        }
+
+        if ($hasWarning) {
+            Add-Result "VNet-Admin" "[$WarningStatus] - $($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" "Yellow"
+        }
+        else {
+            Add-Result "VNet-Admin" "[$OkStatus] - $($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" "Green"
+        }
     }
 }
 else {
@@ -184,26 +188,21 @@ $vnetWarehouse = $allVNets |
 if ($vnetWarehouse) {
     $warehouseAddressOk = $vnetWarehouse.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Warehouse.AddressSpace
 
-    if ($warehouseAddressOk) {
-        Add-Result "VNet-Sandelis" "[$OkStatus] - $($LocCfg.Networks.Warehouse.AddressSpace)" "Green"
-    }
-    else {
-        $actual = $vnetWarehouse.AddressSpace.AddressPrefixes -join ", "
-        Add-Result "VNet-Sandelis" "[$ErrorStatus] - Adresacija: $actual" "Red"
-    }
-
     $serverSubnet = $vnetWarehouse.Subnets |
         Where-Object Name -EQ $LocCfg.Networks.Warehouse.Subnets.Servers.Name |
         Select-Object -First 1
 
-    if ($serverSubnet -and $serverSubnet.AddressPrefix -eq $LocCfg.Networks.Warehouse.Subnets.Servers.Prefix) {
-        Add-Result " - Servers" "[$OkStatus] - $($serverSubnet.AddressPrefix)" "Green"
-    }
-    elseif ($serverSubnet) {
-        Add-Result " - Servers" "[$ErrorStatus] - $($serverSubnet.AddressPrefix)" "Red"
+    if (-not $warehouseAddressOk) {
+        $actual = $vnetWarehouse.AddressSpace.AddressPrefixes -join ", "
+        Add-Result "VNet-Sandelis" "[$ErrorStatus] - Adresacija: $actual" "Red"
     }
     else {
-        Add-Result " - Servers" "[$MissingStatus] - Potinklis nerastas" "Red"
+        if ($serverSubnet -and $serverSubnet.AddressPrefix -eq $LocCfg.Networks.Warehouse.Subnets.Servers.Prefix) {
+            Add-Result "VNet-Sandelis" "[$OkStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($serverSubnet.AddressPrefix)" "Green"
+        }
+        else {
+            Add-Result "VNet-Sandelis" "[$WarningStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers neteisingas" "Yellow"
+        }
     }
 }
 else {
