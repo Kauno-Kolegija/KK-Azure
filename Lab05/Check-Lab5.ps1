@@ -557,10 +557,42 @@ if ($targetRG) {
         (Test-TagValue $vm2.Tags "NLB" "")
     )
 
+    $vnetResource = if ($vnet) {
+        Get-AzResource -ResourceId $vnet.Id -ErrorAction SilentlyContinue
+    } else {
+        $null
+    }
+
     $vnetTagsOk = (
-        $vnet -and
-        (Test-TagValue $vnet.Tags "Lab" $LocCfg.Tags.VNet.Lab) -and
-        (Test-TagValue $vnet.Tags "Environment" $LocCfg.Tags.VNet.Environment)
+        $vnetResource -and
+        (Test-TagValue $vnetResource.Tags "Lab" $LocCfg.Tags.VNet.Lab) -and
+        (Test-TagValue $vnetResource.Tags "Environment" $LocCfg.Tags.VNet.Environment)
+    )
+
+    $vm1TagsOk = (
+        $vm1 -and
+        (Test-TagValue $vm1.Tags "Environment" $LocCfg.Tags.VirtualMachines.Environment) -and
+        (Test-TagValue $vm1.Tags "CreatedBy" "") -and
+        (Test-TagValue $vm1.Tags "NLB" "")
+    )
+
+    $vm2TagsOk = (
+        $vm2 -and
+        (Test-TagValue $vm2.Tags "Environment" $LocCfg.Tags.VirtualMachines.Environment) -and
+        (Test-TagValue $vm2.Tags "CreatedBy" "") -and
+        (Test-TagValue $vm2.Tags "NLB" "")
+    )
+
+    $vnetResource = if ($vnet) {
+        Get-AzResource -ResourceId $vnet.Id -ErrorAction SilentlyContinue
+    } else {
+        $null
+    }
+
+    $vnetTagsOk = (
+        $vnetResource -and
+        (Test-TagValue $vnetResource.Tags "Lab" $LocCfg.Tags.VNet.Lab) -and
+        (Test-TagValue $vnetResource.Tags "Environment" $LocCfg.Tags.VNet.Environment)
     )
 
     if ($vm1TagsOk -and $vm2TagsOk -and $vnetTagsOk) {
