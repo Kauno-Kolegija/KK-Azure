@@ -1,193 +1,477 @@
-# --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 04: Defense in Depth (Platinum - Full Topology - Multi-Language)"
-Clear-Host
-Write-Host "--------------------------------------------------"
-Write-Host $ScriptVersion -ForegroundColor Magenta
-Write-Host "Vykdoma pilna topologijos ir saugumo patikra..."
-Write-Host "--------------------------------------------------"
+# ============================================================
+# LAB 4 - Azure Networking validation
+# ============================================================
 
-# --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
+# --- 1. KALBA ---
+if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
+
+# --- 2. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
-} catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų."
-    exit
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
+    }
+    else {
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+    }
+}
+catch {
+    Write-Error "Failed to load common functions."
+    throw
 }
 
-# --- 2. INICIJUOJAME DARBĄ ---
-$ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json"
-try {
-    $Setup = Initialize-Lab -LocalConfigUrl $ConfigUrl
-    $LocCfg = $Setup.LocalConfig
-} catch {
-    $LocCfg = @{ LabName = "Defense in Depth Lab" }
-}
+# --- 3. INICIJUOJAME DARBĄ ---
+$Setup = Initialize-Lab `
+    -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json" `
+    -Lang $Lang
 
-$CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
-if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
+$LocCfg  = $Setup.LocalConfig
+$Msg     = $Setup.Messages
+$LabName = $LocCfg.LabName
 
-# --- 3. DUOMENŲ RINKIMAS ---
+$OkStatus      = $Msg.Ok
+$ErrorStatus   = $Msg.Error
+$MissingStatus = "TRŪKSTA"
+
 $resourceResults = @()
 
-# A. Resursų Grupės (Tikriname, ar yra bent 3 grupės su RG-LAB04)
-$labRGs = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB04" }
-if ($labRGs.Count -ge 3) {
-    $rgText = "[OK] - Rastos 3+ grupės"
-    $rgColor = "Green"
-} else {
-    $rgText = "[DĖMESIO] - Rasta tik $($labRGs.Count) grupės (Reikia 3)"
-    $rgColor = "Yellow"
-}
-$resourceResults += [PSCustomObject]@{ Name = "Resursų grupės"; Text = $rgText; Color = $rgColor }
+# ============================================================
+# PAGALBINĖS FUNKCIJOS
+# ============================================================
 
-# B. Tinklai ir Peering
-$allVnets = Get-AzVirtualNetwork
-$vnetAdmin = $allVnets | Where-Object Name -match "VNet-Admin" | Select-Object -First 1
+function Add-Result {
+    param (
+        [string]$Name,
+        [string]$Text,
+        [string]$Color = "Green"
+    )
 
-# PRIDĖTA: VNet-Warehouse (EN) ir VNet-Sandelys/Sandelis (LT) palaikymas
-$vnetSandelys = $allVnets | Where-Object Name -match "VNet-Sandelys|VNet-Sandelis|VNet-Warehouse" | Select-Object -First 1
-
-if ($vnetAdmin -and $vnetSandelys) {
-    # Ieškome peering'o, kuris sujungia šiuos du tinklus
-    $peering = $vnetAdmin.VirtualNetworkPeerings | Select-Object -First 1
-    if ($peering -and $peering.PeeringState -eq "Connected") {
-        $peerText = "[OK] - Connected (Sujungta)"
-        $peerColor = "Green"
-    } else {
-        $peerText = "[KLAIDA] - Peering nerastas arba atsijungęs"
-        $peerColor = "Red"
+    $script:resourceResults += [PSCustomObject]@{
+        Name  = $Name
+        Text  = $Text
+        Color = $Color
     }
-    $resourceResults += [PSCustomObject]@{ Name = "Tinklų sujungimas"; Text = $peerText; Color = $peerColor }
-} else {
-    $resourceResults += [PSCustomObject]@{ Name = "Tinklai"; Text = "[TRŪKSTA] - Nerasti VNet tinklai"; Color = "Red" }
 }
 
-# --- GAVIMAS VISŲ VM ---
-$allVMs = Get-AzVM
+function Get-NicFromVM {
+    param ($VM)
 
-# C. Admin Serveris (Klientas)
-$vmAdmin = $allVMs | Where-Object Name -match "VM-Admin|Admin-VM" | Select-Object -First 1
-
-if ($vmAdmin) {
-    # Tikriname, ar jis tikrai VNet-Admin tinkle
-    $nicId = $vmAdmin.NetworkProfile.NetworkInterfaces[0].Id
-    $nic = Get-AzNetworkInterface -ResourceId $nicId
-    $subnetId = $nic.IpConfigurations[0].Subnet.Id
-    
-    if ($subnetId -match "VNet-Admin") {
-        $adminText = "[OK] - Rastas ir prijungtas prie VNet-Admin"
-        $adminColor = "Green"
-    } else {
-        $adminText = "[DĖMESIO] - VM yra, bet ne 'VNet-Admin' tinkle"
-        $adminColor = "Yellow"
+    if (-not $VM -or -not $VM.NetworkProfile.NetworkInterfaces[0].Id) {
+        return $null
     }
-} else {
-    $adminText = "[TRŪKSTA] - Nerastas serveris VM-Admin"
-    $adminColor = "Red"
-}
-$resourceResults += [PSCustomObject]@{ Name = "Admin Serveris"; Text = $adminText; Color = $adminColor }
 
-# D. Sandėlio Serveris (Taikinys)
-# PRIDĖTA: VM-Warehouse (EN) ir VM-Sandelis (LT) palaikymas
-$vmSandelys = $allVMs | Where-Object Name -match "VM-Sand|VM-Sandelis|Sand-VM|Sandelis-VM|VM-Warehouse|Warehouse-VM" | Select-Object -First 1
+    $nicId = $VM.NetworkProfile.NetworkInterfaces[0].Id
+    $parts = $nicId -split '/'
 
-if ($vmSandelys) {
-    $nicId = $vmSandelys.NetworkProfile.NetworkInterfaces[0].Id
-    $nic = Get-AzNetworkInterface -ResourceId $nicId
-    
-    # 1. Tikriname ASG
-    if ($nic.IpConfigurations.ApplicationSecurityGroups.Id -match "ASG-DB-Servers") {
-        $asgText = "[OK] - Priskirta grupė 'ASG-DB-Servers'"
-        $asgColor = "Green"
-    } else {
-        $asgText = "[TRŪKSTA] - VM neturi ASG grupės"
-        $asgColor = "Red"
+    if ($parts.Count -lt 9) {
+        return $null
     }
-    $resourceResults += [PSCustomObject]@{ Name = "Sandėlio VM (ASG)"; Text = $asgText; Color = $asgColor }
 
-    # 2. Tikriname VM NSG (Deny)
-    if ($nic.NetworkSecurityGroup) {
-        $nsgIdParts = $nic.NetworkSecurityGroup.Id -split '/'
-        $vmNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgIdParts[4] -Name $nsgIdParts[-1]
-        
-        $denyRule = $vmNsg.SecurityRules | Where-Object { 
-            ($_.Access -eq "Deny") -and 
-            (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80") -or ($_.DestinationPortRange -contains "*")) 
-        }
-        
-        if ($denyRule) {
-            # Jei yra kelios taisyklės, paimame pirmą
-            $rule = $denyRule[0]
-            if ($rule.Priority -le 1000) {
-                $vmSecText = "[OK] - DENY taisyklė (Port $($rule.DestinationPortRange), Prio: $($rule.Priority))"
-                $vmSecColor = "Green"
-            } else {
-                $vmSecText = "[ĮSPĖJIMAS] - DENY prioritetas per žemas!"
-                $vmSecColor = "Yellow"
-            }
-        } else {
-            $vmSecText = "[KLAIDA] - Nerasta DENY taisyklė (1433/80)"
-            $vmSecColor = "Red"
-        }
-    } else {
-        $vmSecText = "[TRŪKSTA] - Serveriui nepriskirta NSG"
-        $vmSecColor = "Red"
-    }
-    $resourceResults += [PSCustomObject]@{ Name = "Saugumas (VM Siena)"; Text = $vmSecText; Color = $vmSecColor }
-
-} else {
-    $resourceResults += [PSCustomObject]@{ Name = "Sandėlio VM"; Text = "[TRŪKSTA] - Serveris nerastas"; Color = "Red" }
+    Get-AzNetworkInterface `
+        -ResourceGroupName $parts[4] `
+        -Name $parts[-1] `
+        -ErrorAction SilentlyContinue
 }
 
-# E. Saugumas: Tinklo Siena (Subnet NSG)
-if ($vnetSandelys) {
-    $subnet = $vnetSandelys.Subnets | Where-Object { $_.NetworkSecurityGroup -ne $null } | Select-Object -First 1
-    
-    if ($subnet) {
-        $nsgIdParts = $subnet.NetworkSecurityGroup.Id -split '/'
-        $subNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgIdParts[4] -Name $nsgIdParts[-1]
-        
-        $allowRule = $subNsg.SecurityRules | Where-Object { 
-            ($_.Access -eq "Allow") -and 
-            (($_.DestinationPortRange -contains "1433") -or ($_.DestinationPortRange -contains "80") -or ($_.DestinationPortRange -contains "*")) 
-        }
-        
-        if ($allowRule) {
-            $rule = $allowRule[0]
-            $netSecText = "[OK] - Subnet NSG leidžia Port $($rule.DestinationPortRange)"
-            $netSecColor = "Green"
-        } else {
-            $netSecText = "[KLAIDA] - Subnet NSG neturi Allow taisyklės"
-            $netSecColor = "Red"
-        }
-    } else {
-        $netSecText = "[TRŪKSTA] - Potinkliui nepriskirta jokia NSG"
-        $netSecColor = "Red"
+function Test-PortRule {
+    param (
+        $Rule,
+        [string]$Port
+    )
+
+    if (-not $Rule) { return $false }
+
+    $ports = @()
+
+    if ($Rule.DestinationPortRange) {
+        $ports += @($Rule.DestinationPortRange)
     }
-    $resourceResults += [PSCustomObject]@{ Name = "Saugumas (Tinklo Siena)"; Text = $netSecText; Color = $netSecColor }
-} else {
-    $resourceResults += [PSCustomObject]@{ Name = "Saugumas (Tinklo Siena)"; Text = "[KLAIDA] - Nerastas Sandėlio tinklas"; Color = "Red" }
+
+    if ($Rule.DestinationPortRanges) {
+        $ports += @($Rule.DestinationPortRanges)
+    }
+
+    return ($ports -contains $Port)
 }
 
-# --- 4. IŠVEDIMAS ---
+# ============================================================
+# A. RESOURCE GROUPS
+# ============================================================
+
+$allRGs = @(Get-AzResourceGroup)
+
+$rgInfra = $allRGs |
+    Where-Object ResourceGroupName -Match $LocCfg.ResourceGroups.Infrastructure |
+    Select-Object -First 1
+
+$rgAdmin = $allRGs |
+    Where-Object ResourceGroupName -Match $LocCfg.ResourceGroups.Administration |
+    Select-Object -First 1
+
+$rgWarehouse = $allRGs |
+    Where-Object ResourceGroupName -Match $LocCfg.ResourceGroups.Warehouse |
+    Select-Object -First 1
+
+$foundRGs = @($rgInfra, $rgAdmin, $rgWarehouse | Where-Object { $_ }).Count
+
+if ($rgInfra -and $rgAdmin -and $rgWarehouse) {
+    Add-Result "Resursų grupės" "[$OkStatus] - 3/3" "Green"
+}
+else {
+    Add-Result "Resursų grupės" "[$ErrorStatus] - Rasta $foundRGs/3" "Red"
+}
+
+# ============================================================
+# B. VNET-ADMIN
+# ============================================================
+
+$allVNets = @(Get-AzVirtualNetwork)
+
+$vnetAdmin = $allVNets |
+    Where-Object Name -EQ $LocCfg.Networks.Admin.Name |
+    Select-Object -First 1
+
+if ($vnetAdmin) {
+    $adminAddressOk = $vnetAdmin.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Admin.AddressSpace
+
+    if ($adminAddressOk) {
+        Add-Result "VNet-Admin" "[$OkStatus] - $($LocCfg.Networks.Admin.AddressSpace)" "Green"
+    }
+    else {
+        $actual = $vnetAdmin.AddressSpace.AddressPrefixes -join ", "
+        Add-Result "VNet-Admin" "[$ErrorStatus] - Adresacija: $actual" "Red"
+    }
+
+    $frontEnd = $vnetAdmin.Subnets |
+        Where-Object Name -EQ $LocCfg.Networks.Admin.Subnets.FrontEnd.Name |
+        Select-Object -First 1
+
+    if ($frontEnd -and $frontEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.FrontEnd.Prefix) {
+        Add-Result " - FrontEnd" "[$OkStatus] - $($frontEnd.AddressPrefix)" "Green"
+    }
+    elseif ($frontEnd) {
+        Add-Result " - FrontEnd" "[$ErrorStatus] - $($frontEnd.AddressPrefix)" "Red"
+    }
+    else {
+        Add-Result " - FrontEnd" "[$MissingStatus] - Potinklis nerastas" "Red"
+    }
+
+    $backEnd = $vnetAdmin.Subnets |
+        Where-Object Name -EQ $LocCfg.Networks.Admin.Subnets.BackEnd.Name |
+        Select-Object -First 1
+
+    if ($backEnd -and $backEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.BackEnd.Prefix) {
+        Add-Result " - BackEnd" "[$OkStatus] - $($backEnd.AddressPrefix)" "Green"
+    }
+    elseif ($backEnd) {
+        Add-Result " - BackEnd" "[$ErrorStatus] - $($backEnd.AddressPrefix)" "Red"
+    }
+    else {
+        Add-Result " - BackEnd" "[$MissingStatus] - Potinklis nerastas" "Red"
+    }
+}
+else {
+    Add-Result "VNet-Admin" "[$MissingStatus] - Tinklas nerastas" "Red"
+}
+
+# ============================================================
+# C. VNET-SANDELIS
+# ============================================================
+
+$vnetWarehouse = $allVNets |
+    Where-Object Name -EQ $LocCfg.Networks.Warehouse.Name |
+    Select-Object -First 1
+
+if ($vnetWarehouse) {
+    $warehouseAddressOk = $vnetWarehouse.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Warehouse.AddressSpace
+
+    if ($warehouseAddressOk) {
+        Add-Result "VNet-Sandelis" "[$OkStatus] - $($LocCfg.Networks.Warehouse.AddressSpace)" "Green"
+    }
+    else {
+        $actual = $vnetWarehouse.AddressSpace.AddressPrefixes -join ", "
+        Add-Result "VNet-Sandelis" "[$ErrorStatus] - Adresacija: $actual" "Red"
+    }
+
+    $serverSubnet = $vnetWarehouse.Subnets |
+        Where-Object Name -EQ $LocCfg.Networks.Warehouse.Subnets.Servers.Name |
+        Select-Object -First 1
+
+    if ($serverSubnet -and $serverSubnet.AddressPrefix -eq $LocCfg.Networks.Warehouse.Subnets.Servers.Prefix) {
+        Add-Result " - Servers" "[$OkStatus] - $($serverSubnet.AddressPrefix)" "Green"
+    }
+    elseif ($serverSubnet) {
+        Add-Result " - Servers" "[$ErrorStatus] - $($serverSubnet.AddressPrefix)" "Red"
+    }
+    else {
+        Add-Result " - Servers" "[$MissingStatus] - Potinklis nerastas" "Red"
+    }
+}
+else {
+    Add-Result "VNet-Sandelis" "[$MissingStatus] - Tinklas nerastas" "Red"
+}
+
+# ============================================================
+# D. VIRTUAL MACHINES
+# ============================================================
+
+$allVMs = @(Get-AzVM)
+
+$vmAdmin = $allVMs |
+    Where-Object Name -EQ $LocCfg.VirtualMachines.Admin |
+    Select-Object -First 1
+
+$vmWarehouse = $allVMs |
+    Where-Object Name -EQ $LocCfg.VirtualMachines.Warehouse |
+    Select-Object -First 1
+
+$nicAdmin = Get-NicFromVM $vmAdmin
+$nicWarehouse = Get-NicFromVM $vmWarehouse
+
+if ($vmAdmin -and $nicAdmin) {
+    $adminIp = $nicAdmin.IpConfigurations[0].PrivateIpAddress
+    $adminSubnetId = $nicAdmin.IpConfigurations[0].Subnet.Id
+
+    $correctRG = $vmAdmin.ResourceGroupName -match $LocCfg.ResourceGroups.Administration
+    $correctSubnet = $adminSubnetId -match "/virtualNetworks/VNet-Admin/subnets/VNet-Admin-FrontEnd$"
+
+    if ($correctRG -and $correctSubnet) {
+        Add-Result "VM-Admin" "[$OkStatus] - $adminIp" "Green"
+    }
+    else {
+        Add-Result "VM-Admin" "[$ErrorStatus] - Netinkama RG arba potinklis ($adminIp)" "Red"
+    }
+}
+else {
+    Add-Result "VM-Admin" "[$MissingStatus] - Serveris nerastas" "Red"
+}
+
+if ($vmWarehouse -and $nicWarehouse) {
+    $warehouseIp = $nicWarehouse.IpConfigurations[0].PrivateIpAddress
+    $warehouseSubnetId = $nicWarehouse.IpConfigurations[0].Subnet.Id
+
+    $correctRG = $vmWarehouse.ResourceGroupName -match $LocCfg.ResourceGroups.Warehouse
+    $correctSubnet = $warehouseSubnetId -match "/virtualNetworks/VNet-Sandelis/subnets/VNet-Sandelis-Servers$"
+
+    if ($correctRG -and $correctSubnet) {
+        Add-Result "VM-Sandelis" "[$OkStatus] - $warehouseIp" "Green"
+    }
+    else {
+        Add-Result "VM-Sandelis" "[$ErrorStatus] - Netinkama RG arba potinklis ($warehouseIp)" "Red"
+    }
+}
+else {
+    Add-Result "VM-Sandelis" "[$MissingStatus] - Serveris nerastas" "Red"
+}
+
+# ============================================================
+# E. VNET PEERING
+# ============================================================
+
+if ($vnetAdmin -and $vnetWarehouse) {
+    $adminToWarehouse = $vnetAdmin.VirtualNetworkPeerings |
+        Where-Object {
+            $_.RemoteVirtualNetwork.Id -eq $vnetWarehouse.Id -and
+            $_.PeeringState -eq "Connected"
+        } |
+        Select-Object -First 1
+
+    $warehouseToAdmin = $vnetWarehouse.VirtualNetworkPeerings |
+        Where-Object {
+            $_.RemoteVirtualNetwork.Id -eq $vnetAdmin.Id -and
+            $_.PeeringState -eq "Connected"
+        } |
+        Select-Object -First 1
+
+    if ($adminToWarehouse -and $warehouseToAdmin) {
+        Add-Result "VNet Peering" "[$OkStatus] - Connected" "Green"
+    }
+    else {
+        Add-Result "VNet Peering" "[$ErrorStatus] - Peering nesujungtas abiem kryptimis" "Red"
+    }
+}
+else {
+    Add-Result "VNet Peering" "[$MissingStatus] - Trūksta VNet" "Red"
+}
+
+# ============================================================
+# F. APPLICATION SECURITY GROUP
+# ============================================================
+
+$asg = Get-AzApplicationSecurityGroup -ErrorAction SilentlyContinue |
+    Where-Object Name -EQ $LocCfg.ApplicationSecurityGroup |
+    Select-Object -First 1
+
+if ($asg -and $nicWarehouse) {
+    $asgIds = @($nicWarehouse.IpConfigurations.ApplicationSecurityGroups.Id)
+
+    if ($asgIds -contains $asg.Id) {
+        Add-Result "ASG-DB-Servers" "[$OkStatus] - VM-Sandelis priskirtas" "Green"
+    }
+    else {
+        Add-Result "ASG-DB-Servers" "[$ErrorStatus] - VM-Sandelis nepriskirtas" "Red"
+    }
+}
+elseif ($asg) {
+    Add-Result "ASG-DB-Servers" "[$ErrorStatus] - ASG yra, VM nerasta" "Red"
+}
+else {
+    Add-Result "ASG-DB-Servers" "[$MissingStatus] - ASG nerasta" "Red"
+}
+
+# ============================================================
+# G. SUBNET NSG
+# ============================================================
+
+$subnetNsg = Get-AzNetworkSecurityGroup -ErrorAction SilentlyContinue |
+    Where-Object Name -EQ $LocCfg.SubnetNSG.Name |
+    Select-Object -First 1
+
+$subnetNsgAssociated = $false
+
+if ($serverSubnet -and $serverSubnet.NetworkSecurityGroup -and $subnetNsg) {
+    $subnetNsgAssociated = $serverSubnet.NetworkSecurityGroup.Id -eq $subnetNsg.Id
+}
+
+if (-not $subnetNsg) {
+    Add-Result "Subnet NSG" "[$MissingStatus] - $($LocCfg.SubnetNSG.Name)" "Red"
+}
+elseif (-not $subnetNsgAssociated) {
+    Add-Result "Subnet NSG" "[$ErrorStatus] - NSG nepriskirta VNet-Sandelis-Servers" "Red"
+}
+else {
+    $sqlRule = $subnetNsg.SecurityRules |
+        Where-Object Name -EQ $LocCfg.SubnetNSG.SqlRule.Name |
+        Select-Object -First 1
+
+    $sqlPortOk = Test-PortRule $sqlRule $LocCfg.SubnetNSG.SqlRule.Port
+
+    $sqlAsgOk = $false
+
+    if ($sqlRule -and $asg) {
+        $sqlAsgIds = @($sqlRule.DestinationApplicationSecurityGroups.Id)
+        $sqlAsgOk = $sqlAsgIds -contains $asg.Id
+    }
+
+    $sqlOk =
+        $sqlRule -and
+        $sqlRule.Access -eq $LocCfg.SubnetNSG.SqlRule.Access -and
+        $sqlRule.Priority -eq $LocCfg.SubnetNSG.SqlRule.Priority -and
+        $sqlPortOk -and
+        $sqlAsgOk
+
+    $pingRule = $subnetNsg.SecurityRules |
+        Where-Object Name -EQ $LocCfg.SubnetNSG.PingRule.Name |
+        Select-Object -First 1
+
+    $pingProtocolOk =
+        $pingRule.Protocol -in @("Icmp", "IcmpV4")
+
+    $pingAsgOk = $false
+
+    if ($pingRule -and $asg) {
+        $pingAsgIds = @($pingRule.DestinationApplicationSecurityGroups.Id)
+        $pingAsgOk = $pingAsgIds -contains $asg.Id
+    }
+
+    $pingOk =
+        $pingRule -and
+        $pingRule.Access -eq $LocCfg.SubnetNSG.PingRule.Access -and
+        $pingRule.Priority -eq $LocCfg.SubnetNSG.PingRule.Priority -and
+        $pingProtocolOk -and
+        $pingAsgOk
+
+    if ($sqlOk -and $pingOk) {
+        Add-Result "Subnet NSG" "[$OkStatus] - Allow-SQL, Allow-Ping" "Green"
+    }
+    else {
+        $problems = @()
+
+        if (-not $sqlOk) { $problems += "Allow-SQL" }
+        if (-not $pingOk) { $problems += "Allow-Ping" }
+
+        Add-Result "Subnet NSG" "[$ErrorStatus] - Patikrinkite: $($problems -join ', ')" "Red"
+    }
+}
+
+# ============================================================
+# H. VM NIC NSG
+# ============================================================
+
+if ($nicWarehouse -and $nicWarehouse.NetworkSecurityGroup) {
+    $vmNsgId = $nicWarehouse.NetworkSecurityGroup.Id
+    $parts = $vmNsgId -split '/'
+
+    $vmNsg = Get-AzNetworkSecurityGroup `
+        -ResourceGroupName $parts[4] `
+        -Name $parts[-1] `
+        -ErrorAction SilentlyContinue
+
+    $denyRule = $vmNsg.SecurityRules |
+        Where-Object Name -EQ $LocCfg.VmNSG.Rule.Name |
+        Select-Object -First 1
+
+    $denyPortOk = Test-PortRule $denyRule $LocCfg.VmNSG.Rule.Port
+
+    $denyOk =
+        $denyRule -and
+        $denyRule.Access -eq $LocCfg.VmNSG.Rule.Access -and
+        $denyRule.Priority -eq $LocCfg.VmNSG.Rule.Priority -and
+        $denyPortOk
+
+    if ($denyOk) {
+        Add-Result "VM NSG" "[$OkStatus] - Deny-SQL-LocalServer (1433, Priority 400)" "Green"
+    }
+    else {
+        Add-Result "VM NSG" "[$ErrorStatus] - Netinkama Deny-SQL-LocalServer taisyklė" "Red"
+    }
+}
+elseif ($nicWarehouse) {
+    Add-Result "VM NSG" "[$MissingStatus] - VM-Sandelis NIC neturi NSG" "Red"
+}
+else {
+    Add-Result "VM NSG" "[$MissingStatus] - VM-Sandelis nerastas" "Red"
+}
+
+# ============================================================
+# GALUTINIS REZULTATAS
+# ============================================================
+
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
-Write-Host "`n--- GALUTINIS REZULTATAS ---" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Gray
-if ($Setup.HeaderTitle) { Write-Host "$($Setup.HeaderTitle)" }
-Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
-Write-Host "Data: $date"
-Write-Host "Studentas: $CurrentIdentity"
+Write-Host $Setup.HeaderTitle
+Write-Host $LabName -ForegroundColor Yellow
+Write-Host "$($Msg.Date): $date"
+Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
+Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
 Write-Host "==================================================" -ForegroundColor Gray
 
+# ============================================================
+# REZULTATŲ FORMATAVIMAS
+# ============================================================
+
+$i = 1
+
 foreach ($res in $resourceResults) {
-    $label = "$($res.Name):"
-    $targetWidth = 35
+    if ($res.Name -match "^ -") {
+        $label = "   $($res.Name):"
+    }
+    else {
+        $label = "$i. $($res.Name):"
+        $i++
+    }
+
+    $targetWidth = 30
     $neededSpaces = $targetWidth - $label.Length
     if ($neededSpaces -lt 1) { $neededSpaces = 1 }
+
     $padding = " " * $neededSpaces
+
     Write-Host "$label$padding" -NoNewline
     Write-Host $res.Text -ForegroundColor $res.Color
 }
+
 Write-Host "==================================================" -ForegroundColor Gray
 Write-Host ""

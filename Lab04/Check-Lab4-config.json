@@ -1,10 +1,68 @@
 {
   "LabName": "LAB 4: Tinklo paslaugos (GUI)",
-  "ResourceGroupPattern": "RG-LAB05",
-  "RequiredResources": [
-    { "Type": "Microsoft.Network/virtualNetworks", "Name": "VNet-Admin" },
-    { "Type": "Microsoft.Network/virtualNetworks", "Name": "VNet-Sandelys" },
-    { "Type": "Microsoft.Compute/virtualMachines", "Name": "VM-Admin" },
-    { "Type": "Microsoft.Compute/virtualMachines", "Name": "VM-Sandelis" }
-  ]
+
+  "ResourceGroups": {
+    "Infrastructure": "^RG-LAB04-.+-Infrastruktura$",
+    "Administration": "^RG-LAB04-.+-Administracija$",
+    "Warehouse": "^RG-LAB04-.+-Sandelis$"
+  },
+
+  "Networks": {
+    "Admin": {
+      "Name": "VNet-Admin",
+      "AddressSpace": "10.10.0.0/16",
+      "Subnets": {
+        "FrontEnd": {
+          "Name": "VNet-Admin-FrontEnd",
+          "Prefix": "10.10.0.0/24"
+        },
+        "BackEnd": {
+          "Name": "VNet-Admin-BackEnd",
+          "Prefix": "10.10.1.0/24"
+        }
+      }
+    },
+
+    "Warehouse": {
+      "Name": "VNet-Sandelis",
+      "AddressSpace": "10.20.0.0/16",
+      "Subnets": {
+        "Servers": {
+          "Name": "VNet-Sandelis-Servers",
+          "Prefix": "10.20.1.0/24"
+        }
+      }
+    }
+  },
+
+  "VirtualMachines": {
+    "Admin": "VM-Admin",
+    "Warehouse": "VM-Sandelis"
+  },
+
+  "ApplicationSecurityGroup": "ASG-DB-Servers",
+
+  "SubnetNSG": {
+    "Name": "NSG-Sandelis-Subnet",
+    "SqlRule": {
+      "Name": "Allow-SQL",
+      "Port": "1433",
+      "Access": "Allow",
+      "Priority": 500
+    },
+    "PingRule": {
+      "Name": "Allow-Ping",
+      "Access": "Allow",
+      "Priority": 510
+    }
+  },
+
+  "VmNSG": {
+    "Rule": {
+      "Name": "Deny-SQL-LocalServer",
+      "Port": "1433",
+      "Access": "Deny",
+      "Priority": 400
+    }
+  }
 }
