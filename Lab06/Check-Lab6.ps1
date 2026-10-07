@@ -1,8 +1,4 @@
-if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
-
-Clear-Host
-
-# --- BENDROS FUNKCIJOS ---
+# --- Užkrauname bendras funkcijas ---
 try {
     if ($PSScriptRoot) {
         . (Join-Path $PSScriptRoot '../configs/common.ps1')
@@ -14,12 +10,17 @@ try {
     throw
 }
 
-# --- LAB KONFIGURACIJA ---
-$ConfigUrl = 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab06/Check-Lab6-config.json'
-$Setup = Initialize-Lab -LocalConfigUrl $ConfigUrl
-$LocCfg = $Setup.LocalConfig
-$Msg = $Setup.Messages
-$LabMsg = $LocCfg.Messages.$Lang
+if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
+
+$Setup = Initialize-Lab `
+    -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab06/Check-Lab6-config.json" `
+    -Lang $Lang
+
+$LocCfg  = $Setup.LocalConfig
+$Check   = $LocCfg.Checks
+$LabMsg  = $LocCfg.Messages
+$Msg     = $Setup.Messages
+$LabName = $LocCfg.LabName.$Lang
 if (-not $LabMsg) { $LabMsg = $LocCfg.Messages.LT }
 
 $CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv 2>$null
@@ -132,7 +133,7 @@ if ($Setup.HeaderTitle) { Write-Host $Setup.HeaderTitle }
 Write-Host $LabMsg.LabName -ForegroundColor Yellow
 Write-Host "Data: $date"
 Write-Host "Studentas: $CurrentIdentity"
-if ($Msg.ScriptVersion) { Write-Host "$($Msg.ScriptVersion): LAB06" -ForegroundColor DarkGray }
+Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
 Write-Host '==================================================' -ForegroundColor Gray
 
 foreach ($res in $Results) {
