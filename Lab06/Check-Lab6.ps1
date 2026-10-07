@@ -1,3 +1,7 @@
+# ============================================================
+# LAB 6 CHECKER - STORAGE SERVICES
+# ============================================================
+
 # --- Užkrauname bendras funkcijas ---
 try {
     if ($PSScriptRoot) {
@@ -10,8 +14,10 @@ try {
     throw
 }
 
+# --- Kalba ---
 if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
 
+# --- Inicializacija ---
 $Setup = Initialize-Lab `
     -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab06/Check-Lab6-config.json" `
     -Lang $Lang
@@ -21,127 +27,309 @@ $Check   = $LocCfg.Checks
 $LabMsg  = $LocCfg.Messages
 $Msg     = $Setup.Messages
 $LabName = $LocCfg.LabName.$Lang
-if (-not $LabMsg) { $LabMsg = $LocCfg.Messages.LT }
 
-$CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv 2>$null
-if (-not $CurrentIdentity) { $CurrentIdentity = if ($Lang -eq 'EN') { 'Student' } else { 'Studentas' } }
+$OkStatus    = $Msg.Ok
+$ErrorStatus = $Msg.Error
 
-$Results = @()
+$results = @()
+
 function Add-Result {
-    param([string]$Name, [bool]$Ok, [string]$Text)
-    $script:Results += [PSCustomObject]@{
+    param(
+        [string]$Name,
+        [string]$Text,
+        [string]$Color = "White"
+    )
+
+    $script:results += [PSCustomObject]@{
         Name  = $Name
-        Text  = "$(if ($Ok) { $LabMsg.Ok } else { $LabMsg.Error }) - $Text"
-        Color = if ($Ok) { 'Green' } else { 'Red' }
+        Text  = $Text
+        Color = $Color
     }
 }
 
-# --- 1. PAGRINDINĖ RESURSŲ GRUPĖ ---
-$LabRG = Get-AzResourceGroup -ErrorAction SilentlyContinue |
-    Where-Object { $_.ResourceGroupName -match $LocCfg.MainResourceGroupPattern } |
+# ============================================================
+# 1. RESOURCE GROUP
+# ============================================================
+
+$targetRG = Get-AzResourceGroup -ErrorAction SilentlyContinue |
+    Where-Object ResourceGroupName -Match $LocCfg.ResourceGroup.Pattern |
     Select-Object -First 1
 
-if ($LabRG) {
-    Add-Result $LabMsg.ResourceGroup $true "$($LabMsg.Found) $($LabRG.ResourceGroupName)"
+if ($targetRG) {
+    Add-Result $Check.ResourceGroup.$Lang `
+        "[$OkStatus] - $($LabMsg.Found.$Lang) $($targetRG.ResourceGroupName)" `
+        "Green"
 } else {
-    Add-Result $LabMsg.ResourceGroup $false $LabMsg.MainRgMissing
+    Add-Result $Check.ResourceGroup.$Lang `
+        "[$ErrorStatus] - $($LabMsg.MainRgMissing.$Lang)" `
+        "Red"
 }
 
-$Storage = $null
-if ($LabRG) {
-    $Storage = Get-AzStorageAccount -ResourceGroupName $LabRG.ResourceGroupName -ErrorAction SilentlyContinue |
-        Where-Object { $_.StorageAccountName -match $LocCfg.StorageAccountPattern } |
+$storage = $null
+
+if ($targetRG) {
+    $storage = Get-AzStorageAccount -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction SilentlyContinue |
+        Where-Object StorageAccountName -Match $LocCfg.StorageAccount.NamePattern |
         Select-Object -First 1
 }
 
-# --- 2. STORAGE ACCOUNT ---
-if ($Storage) {
-    Add-Result $LabMsg.StorageAccount $true "$($LabMsg.Found) $($Storage.StorageAccountName)"
+# ============================================================
+# 2. STORAGE ACCOUNT
+# ============================================================
+
+if ($storage) {
+    Add-Result $Check.StorageAccount.$Lang `
+        "[$OkStatus] - $($LabMsg.Found.$Lang) $($storage.StorageAccountName)" `
+        "Green"
 } else {
-    Add-Result $LabMsg.StorageAccount $false $LabMsg.StorageMissing
+    Add-Result $Check.StorageAccount.$Lang `
+        "[$ErrorStatus] - $($LabMsg.StorageMissing.$Lang)" `
+        "Red"
 }
 
-if ($Storage) {
-    $StorageName = $Storage.StorageAccountName
-    $RgName = $LabRG.ResourceGroupName
+if ($storage) {
 
-    # --- 3. STORAGE KONFIGŪRACIJA ---
-    $SkuOk = ($Storage.Sku.Name -eq $LocCfg.ExpectedStorageSku)
-    $TierOk = ($Storage.AccessTier -eq $LocCfg.ExpectedAccessTier)
-    Add-Result $LabMsg.StorageConfig ($SkuOk -and $TierOk) $(if ($SkuOk -and $TierOk) { $LabMsg.StorageConfigOk } else { "$($LabMsg.StorageConfigBad) (SKU=$($Storage.Sku.Name), Tier=$($Storage.AccessTier))" })
+    $storageName = $storage.StorageAccountName
+    $rgName = $targetRG.ResourceGroupName
 
-    # --- 4. DATA PROTECTION (management plane; firewall netrukdo) ---
-    try {
-        $BlobProps = Get-AzStorageBlobServiceProperty -ResourceGroupName $RgName -StorageAccountName $StorageName -ErrorAction Stop
-        $FileProps = Get-AzStorageFileServiceProperty -ResourceGroupName $RgName -StorageAccountName $StorageName -ErrorAction Stop
+    # ========================================================
+    # 3. STORAGE CONFIGURATION
+    # ========================================================
 
-        $VersioningOk = ($BlobProps.IsVersioningEnabled -eq $true)
-        $BlobSoftDeleteOk = ($BlobProps.DeleteRetentionPolicy.Enabled -eq $true)
-        $ContainerSoftDeleteOk = ($BlobProps.ContainerDeleteRetentionPolicy.Enabled -eq $true)
-        $FileSoftDeleteOk = ($FileProps.ShareDeleteRetentionPolicy.Enabled -eq $true)
-        $ProtectionOk = $VersioningOk -and $BlobSoftDeleteOk -and $ContainerSoftDeleteOk -and $FileSoftDeleteOk
-        Add-Result $LabMsg.DataProtection $ProtectionOk $(if ($ProtectionOk) { $LabMsg.ProtectionOk } else { $LabMsg.ProtectionBad })
-    } catch {
-        Add-Result $LabMsg.DataProtection $false $LabMsg.ProtectionBad
+    $skuOk = $storage.Sku.Name -eq $LocCfg.StorageAccount.Sku
+    $tierOk = $storage.AccessTier -eq $LocCfg.StorageAccount.AccessTier
+    $storageConfigOk = $skuOk -and $tierOk
+
+    if ($storageConfigOk) {
+        Add-Result $Check.StorageConfig.$Lang `
+            "[$OkStatus] - $($storage.Sku.Name) + $($storage.AccessTier)" `
+            "Green"
+    } else {
+        Add-Result $Check.StorageConfig.$Lang `
+            "[$ErrorStatus] - $($LabMsg.StorageConfigBad.$Lang) (SKU=$($storage.Sku.Name), Tier=$($storage.AccessTier))" `
+            "Red"
     }
 
-    # --- 5. BLOB KONTEINERIAI (management plane; netikriname turinio dėl FW) ---
+    # ========================================================
+    # 4. DATA PROTECTION
+    # Management plane - Storage firewall netrukdo.
+    # ========================================================
+
     try {
-        $Containers = @(Get-AzRmStorageContainer -ResourceGroupName $RgName -StorageAccountName $StorageName -ErrorAction Stop)
-        $StudentBlobOk = @($Containers | Where-Object { $_.Name -match $LocCfg.BlobContainerPattern }).Count -gt 0
-        $ExplorerContainerOk = @($Containers | Where-Object { $_.Name -eq $LocCfg.StorageExplorerContainer }).Count -gt 0
-        $ContainersOk = $StudentBlobOk -and $ExplorerContainerOk
-        Add-Result $LabMsg.BlobContainers $ContainersOk $(if ($ContainersOk) { $LabMsg.ContainersOk } else { $LabMsg.ContainersBad })
+        $blobProps = Get-AzStorageBlobServiceProperty `
+            -ResourceGroupName $rgName `
+            -StorageAccountName $storageName `
+            -ErrorAction Stop
+
+        $fileProps = Get-AzStorageFileServiceProperty `
+            -ResourceGroupName $rgName `
+            -StorageAccountName $storageName `
+            -ErrorAction Stop
+
+        $versioningOk = $blobProps.IsVersioningEnabled -eq $true
+        $blobSoftDeleteOk = $blobProps.DeleteRetentionPolicy.Enabled -eq $true
+        $containerSoftDeleteOk = $blobProps.ContainerDeleteRetentionPolicy.Enabled -eq $true
+        $fileSoftDeleteOk = $fileProps.ShareDeleteRetentionPolicy.Enabled -eq $true
+
+        $protectionOk = (
+            $versioningOk -and
+            $blobSoftDeleteOk -and
+            $containerSoftDeleteOk -and
+            $fileSoftDeleteOk
+        )
+
+        if ($protectionOk) {
+            Add-Result $Check.DataProtection.$Lang `
+                "[$OkStatus] - $($LabMsg.ProtectionOk.$Lang)" `
+                "Green"
+        } else {
+            Add-Result $Check.DataProtection.$Lang `
+                "[$ErrorStatus] - $($LabMsg.ProtectionBad.$Lang)" `
+                "Red"
+        }
     } catch {
-        Add-Result $LabMsg.BlobContainers $false $LabMsg.ContainersBad
+        Add-Result $Check.DataProtection.$Lang `
+            "[$ErrorStatus] - $($LabMsg.ProtectionBad.$Lang)" `
+            "Red"
     }
 
-    # --- 6. AZURE FILES + SNAPSHOT (management plane) ---
+    # ========================================================
+    # 5. BLOB CONTAINERS
+    # Management plane - netikriname turinio dėl Storage FW.
+    # ========================================================
+
     try {
-        $Shares = @(Get-AzRmStorageShare -ResourceGroupName $RgName -StorageAccountName $StorageName -IncludeSnapshot -ErrorAction Stop)
-        $ShareOk = @($Shares | Where-Object { $_.Name -eq $LocCfg.FileShareName -and -not $_.SnapshotTime }).Count -gt 0
-        $SnapshotOk = @($Shares | Where-Object { $_.Name -eq $LocCfg.FileShareName -and $_.SnapshotTime }).Count -gt 0
-        $FilesOk = $ShareOk -and $SnapshotOk
-        Add-Result $LabMsg.AzureFiles $FilesOk $(if ($FilesOk) { $LabMsg.FilesOk } else { $LabMsg.FilesBad })
+        $containers = @(Get-AzRmStorageContainer `
+            -ResourceGroupName $rgName `
+            -StorageAccountName $storageName `
+            -ErrorAction Stop)
+
+        $studentBlobOk = @(
+            $containers | Where-Object Name -Match $LocCfg.Blob.StudentContainerPattern
+        ).Count -gt 0
+
+        $staticWebsiteOk = @(
+            $containers | Where-Object Name -EQ $LocCfg.Blob.StaticWebsiteContainer
+        ).Count -gt 0
+
+        $explorerContainerOk = @(
+            $containers | Where-Object Name -EQ $LocCfg.Blob.StorageExplorerContainer
+        ).Count -gt 0
+
+        $containersOk = $studentBlobOk -and $staticWebsiteOk -and $explorerContainerOk
+
+        if ($containersOk) {
+            Add-Result $Check.BlobContainers.$Lang `
+                "[$OkStatus] - $($LabMsg.ContainersOk.$Lang)" `
+                "Green"
+        } else {
+            Add-Result $Check.BlobContainers.$Lang `
+                "[$ErrorStatus] - $($LabMsg.ContainersBad.$Lang)" `
+                "Red"
+        }
     } catch {
-        Add-Result $LabMsg.AzureFiles $false $LabMsg.FilesBad
+        Add-Result $Check.BlobContainers.$Lang `
+            "[$ErrorStatus] - $($LabMsg.ContainersBad.$Lang)" `
+            "Red"
     }
 
-    # --- 7. STORAGE FIREWALL / VNET ---
-    $DefaultDenyOk = ($Storage.NetworkRuleSet.DefaultAction -eq 'Deny')
-    $VNetRules = @($Storage.NetworkRuleSet.VirtualNetworkRules)
-    $VNetRuleOk = $VNetRules.Count -gt 0
-    $FirewallOk = $DefaultDenyOk -and $VNetRuleOk
-    Add-Result $LabMsg.Firewall $FirewallOk $(if ($FirewallOk) { $LabMsg.FirewallOk } else { $LabMsg.FirewallBad })
+    # ========================================================
+    # 6. AZURE FILES + SNAPSHOT
+    # Management plane - Storage firewall netrukdo.
+    # ========================================================
+
+    try {
+        $shares = @(Get-AzRmStorageShare `
+            -ResourceGroupName $rgName `
+            -StorageAccountName $storageName `
+            -IncludeSnapshot `
+            -ErrorAction Stop)
+
+        $shareOk = @(
+            $shares | Where-Object {
+                $_.Name -eq $LocCfg.AzureFiles.ShareName -and -not $_.SnapshotTime
+            }
+        ).Count -gt 0
+
+        $snapshotOk = @(
+            $shares | Where-Object {
+                $_.Name -eq $LocCfg.AzureFiles.ShareName -and $_.SnapshotTime
+            }
+        ).Count -gt 0
+
+        $filesOk = $shareOk -and $snapshotOk
+
+        if ($filesOk) {
+            Add-Result $Check.AzureFiles.$Lang `
+                "[$OkStatus] - $($LocCfg.AzureFiles.ShareName) + snapshot" `
+                "Green"
+        } else {
+            Add-Result $Check.AzureFiles.$Lang `
+                "[$ErrorStatus] - $($LabMsg.FilesBad.$Lang)" `
+                "Red"
+        }
+    } catch {
+        Add-Result $Check.AzureFiles.$Lang `
+            "[$ErrorStatus] - $($LabMsg.FilesBad.$Lang)" `
+            "Red"
+    }
+
+    # ========================================================
+    # 7. STORAGE FIREWALL / VNET
+    # ========================================================
+
+    $storage = Get-AzStorageAccount `
+        -ResourceGroupName $rgName `
+        -Name $storageName `
+        -ErrorAction SilentlyContinue
+
+    $defaultDenyOk = $storage.NetworkRuleSet.DefaultAction -eq $LocCfg.Network.DefaultAction
+    $vnetRuleOk = @($storage.NetworkRuleSet.VirtualNetworkRules).Count -gt 0
+    $firewallOk = $defaultDenyOk -and $vnetRuleOk
+
+    if ($firewallOk) {
+        Add-Result $Check.Firewall.$Lang `
+            "[$OkStatus] - $($LabMsg.FirewallOk.$Lang)" `
+            "Green"
+    } else {
+        Add-Result $Check.Firewall.$Lang `
+            "[$ErrorStatus] - $($LabMsg.FirewallBad.$Lang)" `
+            "Red"
+    }
+
 } else {
-    Add-Result $LabMsg.StorageConfig $false $LabMsg.StorageMissing
-    Add-Result $LabMsg.DataProtection $false $LabMsg.StorageMissing
-    Add-Result $LabMsg.BlobContainers $false $LabMsg.StorageMissing
-    Add-Result $LabMsg.AzureFiles $false $LabMsg.StorageMissing
-    Add-Result $LabMsg.Firewall $false $LabMsg.StorageMissing
+
+    Add-Result $Check.StorageConfig.$Lang `
+        "[$ErrorStatus] - $($LabMsg.StorageMissing.$Lang)" `
+        "Red"
+
+    Add-Result $Check.DataProtection.$Lang `
+        "[$ErrorStatus] - $($LabMsg.StorageMissing.$Lang)" `
+        "Red"
+
+    Add-Result $Check.BlobContainers.$Lang `
+        "[$ErrorStatus] - $($LabMsg.StorageMissing.$Lang)" `
+        "Red"
+
+    Add-Result $Check.AzureFiles.$Lang `
+        "[$ErrorStatus] - $($LabMsg.StorageMissing.$Lang)" `
+        "Red"
+
+    Add-Result $Check.Firewall.$Lang `
+        "[$ErrorStatus] - $($LabMsg.StorageMissing.$Lang)" `
+        "Red"
 }
 
-# --- 8. VM PO PERKĖLIMO ---
-$Vm = Get-AzVM -ResourceGroupName $LocCfg.VmResourceGroupName -Name $LocCfg.VmName -ErrorAction SilentlyContinue
-Add-Result $LabMsg.VirtualMachine ([bool]$Vm) $(if ($Vm) { $LabMsg.VmOk } else { $LabMsg.VmBad })
+# ============================================================
+# 8. VM AFTER RESOURCE GROUP MOVE
+# ============================================================
 
-# --- IŠVEDIMAS ---
-$date = Get-Date -Format 'yyyy-MM-dd HH:mm'
-Write-Host "`n--- GALUTINIS REZULTATAS ---" -ForegroundColor Cyan
-Write-Host '==================================================' -ForegroundColor Gray
-if ($Setup.HeaderTitle) { Write-Host $Setup.HeaderTitle }
-Write-Host $LabMsg.LabName -ForegroundColor Yellow
-Write-Host "Data: $date"
-Write-Host "Studentas: $CurrentIdentity"
+$vm = Get-AzVM `
+    -ResourceGroupName $LocCfg.VirtualMachine.ResourceGroupName `
+    -Name $LocCfg.VirtualMachine.Name `
+    -ErrorAction SilentlyContinue
+
+if ($vm) {
+    Add-Result $Check.VirtualMachine.$Lang `
+        "[$OkStatus] - $($LocCfg.VirtualMachine.ResourceGroupName)" `
+        "Green"
+} else {
+    Add-Result $Check.VirtualMachine.$Lang `
+        "[$ErrorStatus] - $($LabMsg.VmBad.$Lang)" `
+        "Red"
+}
+
+# ============================================================
+# GALUTINIS REZULTATAS
+# ============================================================
+
+$date = Get-Date -Format "yyyy-MM-dd HH:mm"
+
+Write-Host ""
+Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
+Write-Host "==================================================" -ForegroundColor Gray
+Write-Host $Setup.HeaderTitle
+Write-Host $LabName -ForegroundColor Yellow
+Write-Host "$($Msg.Date): $date"
+Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
 Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
-Write-Host '==================================================' -ForegroundColor Gray
+Write-Host "==================================================" -ForegroundColor Gray
 
-foreach ($res in $Results) {
-    $label = "$($res.Name):"
-    $targetWidth = 27
-    $padding = ' ' * [Math]::Max(1, $targetWidth - $label.Length)
-    Write-Host "$label$padding" -NoNewline
+$i = 1
+
+foreach ($res in $results) {
+
+    $label = "$i. $($res.Name):"
+    $targetWidth = 34
+
+    $spaces = $targetWidth - $label.Length
+    if ($spaces -lt 1) { $spaces = 1 }
+
+    Write-Host "$label$(" " * $spaces)" -NoNewline
     Write-Host $res.Text -ForegroundColor $res.Color
+
+    $i++
 }
-Write-Host '==================================================' -ForegroundColor Gray
-Write-Host ''
+
+Write-Host "==================================================" -ForegroundColor Gray
+Write-Host ""

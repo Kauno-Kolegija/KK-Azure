@@ -1,72 +1,121 @@
 {
-  "LabName": "LAB 6: Saugyklos paslaugos",
-  "MainResourceGroupPattern": "^RG-LAB06-(?!VM-only$).+",
-  "VmResourceGroupName": "RG-LAB06-VM-only",
-  "StorageAccountPattern": "store",
-  "BlobContainerPattern": "0blob1$",
-  "StorageExplorerContainer": "svarbus-duomenys-azure",
-  "FileShareName": "imones-duomenys",
-  "VmName": "VM-Storage",
-  "ExpectedStorageSku": "Standard_LRS",
-  "ExpectedAccessTier": "Cool",
-  "Messages": {
-    "LT": {
-      "LabName": "LAB 6: Saugyklos paslaugos",
-      "ResourceGroup": "Resursų grupė",
-      "StorageAccount": "Storage Account",
-      "StorageConfig": "Storage konfigūracija",
-      "DataProtection": "Data Protection",
-      "BlobContainers": "Blob konteineriai",
-      "AzureFiles": "Azure Files + Snapshot",
-      "Firewall": "Storage Firewall / VNet",
-      "VirtualMachine": "VM-Storage",
-      "Ok": "[OK]",
-      "Error": "[KLAIDA]",
-      "NotFound": "Nerasta",
-      "Found": "Rasta",
-      "MainRgMissing": "Nerasta pagrindinė LAB06 resursų grupė",
-      "StorageMissing": "Nerastas Storage Account, kurio pavadinime yra 'store'",
-      "StorageConfigOk": "Standard_LRS + Cool",
-      "StorageConfigBad": "Tikėtasi Standard_LRS + Cool",
-      "ProtectionOk": "Versioning + soft delete įjungta",
-      "ProtectionBad": "Trūksta Versioning arba soft delete nustatymų",
-      "ContainersOk": "Rasti laboratorijos konteineriai",
-      "ContainersBad": "Trūksta blob arba svarbus-duomenys-azure konteinerio",
-      "FilesOk": "imones-duomenys + snapshot",
-      "FilesBad": "Trūksta file share arba snapshot",
-      "FirewallOk": "Default Deny + VNet taisyklė",
-      "FirewallBad": "Storage prieiga neapribota VNet taisykle",
-      "VmOk": "Rasta RG-LAB06-VM-only",
-      "VmBad": "VM-Storage nerasta RG-LAB06-VM-only"
+  "LabName": {
+    "LT": "LAB 6: Saugyklos paslaugos",
+    "EN": "LAB 6: Storage Services"
+  },
+
+  "Checks": {
+    "ResourceGroup": {
+      "LT": "Resursų grupė",
+      "EN": "Resource Group"
     },
-    "EN": {
-      "LabName": "LAB 6: Storage services",
-      "ResourceGroup": "Resource group",
-      "StorageAccount": "Storage Account",
-      "StorageConfig": "Storage configuration",
-      "DataProtection": "Data Protection",
-      "BlobContainers": "Blob containers",
-      "AzureFiles": "Azure Files + Snapshot",
-      "Firewall": "Storage Firewall / VNet",
-      "VirtualMachine": "VM-Storage",
-      "Ok": "[OK]",
-      "Error": "[ERROR]",
-      "NotFound": "Not found",
-      "Found": "Found",
-      "MainRgMissing": "Main LAB06 resource group was not found",
-      "StorageMissing": "Storage Account with 'store' in its name was not found",
-      "StorageConfigOk": "Standard_LRS + Cool",
-      "StorageConfigBad": "Expected Standard_LRS + Cool",
-      "ProtectionOk": "Versioning + soft delete enabled",
-      "ProtectionBad": "Versioning or soft delete setting is missing",
-      "ContainersOk": "Required lab containers found",
-      "ContainersBad": "Blob or svarbus-duomenys-azure container is missing",
-      "FilesOk": "imones-duomenys + snapshot",
-      "FilesBad": "File share or snapshot is missing",
-      "FirewallOk": "Default Deny + VNet rule",
-      "FirewallBad": "Storage access is not restricted by a VNet rule",
-      "VmOk": "Found in RG-LAB06-VM-only",
-      "VmBad": "VM-Storage was not found in RG-LAB06-VM-only"
+    "StorageAccount": {
+      "LT": "Storage Account",
+      "EN": "Storage Account"
+    },
+    "StorageConfig": {
+      "LT": "Storage konfigūracija",
+      "EN": "Storage configuration"
+    },
+    "DataProtection": {
+      "LT": "Data Protection",
+      "EN": "Data Protection"
+    },
+    "BlobContainers": {
+      "LT": "Blob konteineriai",
+      "EN": "Blob containers"
+    },
+    "AzureFiles": {
+      "LT": "Azure Files + Snapshot",
+      "EN": "Azure Files + Snapshot"
+    },
+    "Firewall": {
+      "LT": "Storage Firewall / VNet",
+      "EN": "Storage Firewall / VNet"
+    },
+    "VirtualMachine": {
+      "LT": "VM-Storage",
+      "EN": "VM-Storage"
     }
+  },
+
+  "Messages": {
+    "Found": {
+      "LT": "Rasta",
+      "EN": "Found"
+    },
+    "MainRgMissing": {
+      "LT": "Nerasta pagrindinė LAB06 resursų grupė",
+      "EN": "Main LAB06 resource group was not found"
+    },
+    "StorageMissing": {
+      "LT": "Nerastas Storage Account, kurio pavadinime yra 'store'",
+      "EN": "Storage Account with 'store' in its name was not found"
+    },
+    "StorageConfigBad": {
+      "LT": "Tikėtasi Standard_LRS + Cool",
+      "EN": "Expected Standard_LRS + Cool"
+    },
+    "ProtectionOk": {
+      "LT": "Versioning + soft delete įjungta",
+      "EN": "Versioning + soft delete enabled"
+    },
+    "ProtectionBad": {
+      "LT": "Trūksta Versioning arba soft delete nustatymų",
+      "EN": "Versioning or soft delete setting is missing"
+    },
+    "ContainersOk": {
+      "LT": "Rasti 0blob1, $web ir svarbus-duomenys-azure",
+      "EN": "0blob1, $web and svarbus-duomenys-azure found"
+    },
+    "ContainersBad": {
+      "LT": "Trūksta 0blob1, $web arba svarbus-duomenys-azure",
+      "EN": "0blob1, $web or svarbus-duomenys-azure is missing"
+    },
+    "FilesBad": {
+      "LT": "Trūksta imones-duomenys arba snapshot",
+      "EN": "imones-duomenys or snapshot is missing"
+    },
+    "FirewallOk": {
+      "LT": "Default Deny + VNet taisyklė",
+      "EN": "Default Deny + VNet rule"
+    },
+    "FirewallBad": {
+      "LT": "Storage prieiga neapribota VNet taisykle",
+      "EN": "Storage access is not restricted by a VNet rule"
+    },
+    "VmBad": {
+      "LT": "VM-Storage nerasta RG-LAB06-VM-only",
+      "EN": "VM-Storage was not found in RG-LAB06-VM-only"
+    }
+  },
+
+  "ResourceGroup": {
+    "Pattern": "^RG-LAB06-(?!VM-only$).+$"
+  },
+
+  "StorageAccount": {
+    "NamePattern": "store",
+    "Sku": "Standard_LRS",
+    "AccessTier": "Cool"
+  },
+
+  "Blob": {
+    "StudentContainerPattern": "0blob1$",
+    "StaticWebsiteContainer": "$web",
+    "StorageExplorerContainer": "svarbus-duomenys-azure"
+  },
+
+  "AzureFiles": {
+    "ShareName": "imones-duomenys"
+  },
+
+  "Network": {
+    "DefaultAction": "Deny"
+  },
+
+  "VirtualMachine": {
+    "Name": "VM-Storage",
+    "ResourceGroupName": "RG-LAB06-VM-only"
   }
 }
