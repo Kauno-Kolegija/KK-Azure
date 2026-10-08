@@ -5,7 +5,7 @@
 # --- 1. KALBA ---
 if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
 
-# --- 2. UŽKRAUNAME BENDRAS FUNKCIJAS ---
+# --- 2. UZKRAUNAME BENDRAS FUNKCIJAS ---
 try {
     if ($PSScriptRoot) {
         . (Join-Path $PSScriptRoot '../configs/common.ps1')
@@ -19,7 +19,7 @@ catch {
     throw
 }
 
-# --- 3. INICIJUOJAME DARBĄ ---
+# --- 3. INICIJUOJAME DARBA ---
 $Setup = Initialize-Lab `
     -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json" `
     -Lang $Lang
@@ -38,7 +38,7 @@ $WarningStatus = $LabMsg.Warning.$Lang
 $resourceResults = @()
 
 # ============================================================
-# PAGALBINĖS FUNKCIJOS
+# PAGALBINES FUNKCIJOS
 # ============================================================
 
 function Add-Result {
@@ -96,22 +96,53 @@ function Test-PortRule {
     return ($ports -contains $Port)
 }
 
+function Get-LanguageValues {
+    param ($ValueSet)
+
+    @($ValueSet.LT, $ValueSet.EN) |
+        Where-Object { $_ } |
+        Select-Object -Unique
+}
+
+function Test-LanguagePattern {
+    param (
+        [string]$Value,
+        $PatternSet
+    )
+
+    foreach ($pattern in (Get-LanguageValues $PatternSet)) {
+        if ($Value -match $pattern) { return $true }
+    }
+
+    return $false
+}
+
+function Test-LanguageName {
+    param (
+        [string]$Value,
+        $NameSet
+    )
+
+    return (Get-LanguageValues $NameSet) -contains $Value
+}
+
 # ============================================================
 # A. RESOURCE GROUPS
+# Priimami ir LT, ir EN pavadinimai nepriklausomai nuo checkerio kalbos.
 # ============================================================
 
 $allRGs = @(Get-AzResourceGroup)
 
 $rgInfra = $allRGs |
-    Where-Object ResourceGroupName -Match $LocCfg.ResourceGroups.Infrastructure |
+    Where-Object { Test-LanguagePattern $_.ResourceGroupName $LocCfg.ResourceGroups.Infrastructure } |
     Select-Object -First 1
 
 $rgAdmin = $allRGs |
-    Where-Object ResourceGroupName -Match $LocCfg.ResourceGroups.Administration |
+    Where-Object { Test-LanguagePattern $_.ResourceGroupName $LocCfg.ResourceGroups.Administration } |
     Select-Object -First 1
 
 $rgWarehouse = $allRGs |
-    Where-Object ResourceGroupName -Match $LocCfg.ResourceGroups.Warehouse |
+    Where-Object { Test-LanguagePattern $_.ResourceGroupName $LocCfg.ResourceGroups.Warehouse } |
     Select-Object -First 1
 
 $foundRGs = @($rgInfra, $rgAdmin, $rgWarehouse | Where-Object { $_ }).Count
@@ -185,31 +216,29 @@ else {
 # C. VNET-WAREHOUSE / VNET-SANDELIS
 # ============================================================
 
-$warehouseVnetName = $LocCfg.Networks.Warehouse.Names.$Lang
-$warehouseSubnetName = $LocCfg.Networks.Warehouse.Subnets.Servers.Names.$Lang
+$warehouseVnetNames = Get-LanguageValues $LocCfg.Networks.Warehouse.Names
+$warehouseSubnetNames = Get-LanguageValues $LocCfg.Networks.Warehouse.Subnets.Servers.Names
 
 $vnetWarehouse = $allVNets |
-    Where-Object Name -EQ $warehouseVnetName |
+    Where-Object { $warehouseVnetNames -contains $_.Name } |
     Select-Object -First 1
 
 if ($vnetWarehouse) {
     $warehouseAddressOk = $vnetWarehouse.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Warehouse.AddressSpace
 
     $serverSubnet = $vnetWarehouse.Subnets |
-        Where-Object Name -EQ $warehouseSubnetName |
+        Where-Object { $warehouseSubnetNames -contains $_.Name } |
         Select-Object -First 1
 
     if (-not $warehouseAddressOk) {
         $actual = $vnetWarehouse.AddressSpace.AddressPrefixes -join ", "
         Add-Result $Check.VNetWarehouse.$Lang "[$ErrorStatus] - Address space: $actual" "Red"
     }
+    elseif ($serverSubnet -and $serverSubnet.AddressPrefix -eq $LocCfg.Networks.Warehouse.Subnets.Servers.Prefix) {
+        Add-Result $Check.VNetWarehouse.$Lang "[$OkStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($serverSubnet.AddressPrefix)" "Green"
+    }
     else {
-        if ($serverSubnet -and $serverSubnet.AddressPrefix -eq $LocCfg.Networks.Warehouse.Subnets.Servers.Prefix) {
-            Add-Result $Check.VNetWarehouse.$Lang "[$OkStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($serverSubnet.AddressPrefix)" "Green"
-        }
-        else {
-            Add-Result $Check.VNetWarehouse.$Lang "[$WarningStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($LabMsg.SubnetIncorrect.$Lang)" "Yellow"
-        }
+        Add-Result $Check.VNetWarehouse.$Lang "[$WarningStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($LabMsg.SubnetIncorrect.$Lang)" "Yellow"
     }
 }
 else {
@@ -226,10 +255,10 @@ $vmAdmin = $allVMs |
     Where-Object Name -EQ $LocCfg.VirtualMachines.Admin |
     Select-Object -First 1
 
-$warehouseVmName = $LocCfg.VirtualMachines.Warehouse.$Lang
+$warehouseVmNames = Get-LanguageValues $LocCfg.VirtualMachines.Warehouse
 
 $vmWarehouse = $allVMs |
-    Where-Object Name -EQ $warehouseVmName |
+    Where-Object { $warehouseVmNames -contains $_.Name } |
     Select-Object -First 1
 
 $nicAdmin = Get-NicFromVM $vmAdmin
@@ -239,7 +268,7 @@ if ($vmAdmin -and $nicAdmin) {
     $adminIp = $nicAdmin.IpConfigurations[0].PrivateIpAddress
     $adminSubnetId = $nicAdmin.IpConfigurations[0].Subnet.Id
 
-    $correctRG = $vmAdmin.ResourceGroupName -match $LocCfg.ResourceGroups.Administration
+    $correctRG = Test-LanguagePattern $vmAdmin.ResourceGroupName $LocCfg.ResourceGroups.Administration
     $correctSubnet = $adminSubnetId -match "/virtualNetworks/VNet-Admin/subnets/VNet-Admin-FrontEnd$"
 
     if ($correctRG -and $correctSubnet) {
@@ -257,11 +286,21 @@ if ($vmWarehouse -and $nicWarehouse) {
     $warehouseIp = $nicWarehouse.IpConfigurations[0].PrivateIpAddress
     $warehouseSubnetId = $nicWarehouse.IpConfigurations[0].Subnet.Id
 
-    $correctRG = $vmWarehouse.ResourceGroupName -match $LocCfg.ResourceGroups.Warehouse
-    $escapedVnet = [regex]::Escape($warehouseVnetName)
-    $escapedSubnet = [regex]::Escape($warehouseSubnetName)
+    $correctRG = Test-LanguagePattern $vmWarehouse.ResourceGroupName $LocCfg.ResourceGroups.Warehouse
+    $correctSubnet = $false
 
-    $correctSubnet = $warehouseSubnetId -match "/virtualNetworks/$escapedVnet/subnets/$escapedSubnet$"
+    foreach ($vnetName in $warehouseVnetNames) {
+        foreach ($subnetName in $warehouseSubnetNames) {
+            $escapedVnet = [regex]::Escape($vnetName)
+            $escapedSubnet = [regex]::Escape($subnetName)
+
+            if ($warehouseSubnetId -match "/virtualNetworks/$escapedVnet/subnets/$escapedSubnet$") {
+                $correctSubnet = $true
+                break
+            }
+        }
+        if ($correctSubnet) { break }
+    }
 
     if ($correctRG -and $correctSubnet) {
         Add-Result $Check.VmWarehouse.$Lang "[$OkStatus] - $warehouseIp" "Green"
@@ -333,10 +372,10 @@ else {
 # G. SUBNET NSG
 # ============================================================
 
-$subnetNsgName = $LocCfg.SubnetNSG.Names.$Lang
+$subnetNsgNames = Get-LanguageValues $LocCfg.SubnetNSG.Names
 
 $subnetNsg = Get-AzNetworkSecurityGroup -ErrorAction SilentlyContinue |
-    Where-Object Name -EQ $subnetNsgName |
+    Where-Object { $subnetNsgNames -contains $_.Name } |
     Select-Object -First 1
 
 $subnetNsgAssociated = $false
@@ -346,7 +385,7 @@ if ($serverSubnet -and $serverSubnet.NetworkSecurityGroup -and $subnetNsg) {
 }
 
 if (-not $subnetNsg) {
-    Add-Result $Check.SubnetNsg.$Lang "[$MissingStatus] - $subnetNsgName" "Red"
+    Add-Result $Check.SubnetNsg.$Lang "[$MissingStatus] - $($LocCfg.SubnetNSG.Names.$Lang)" "Red"
 }
 elseif (-not $subnetNsgAssociated) {
     Add-Result $Check.SubnetNsg.$Lang "[$ErrorStatus] - $($LabMsg.SubnetNsgNotAssociated.$Lang)" "Red"
@@ -419,10 +458,10 @@ if ($nicWarehouse -and $nicWarehouse.NetworkSecurityGroup) {
         -Name $parts[-1] `
         -ErrorAction SilentlyContinue
 
-    $denyRuleName = $LocCfg.VmNSG.Rule.Name.$Lang
+    $denyRuleNames = Get-LanguageValues $LocCfg.VmNSG.Rule.Name
 
     $denyRule = $vmNsg.SecurityRules |
-        Where-Object Name -EQ $denyRuleName |
+        Where-Object { $denyRuleNames -contains $_.Name } |
         Select-Object -First 1
 
     $denyPortOk = Test-PortRule $denyRule $LocCfg.VmNSG.Rule.Port
@@ -434,7 +473,7 @@ if ($nicWarehouse -and $nicWarehouse.NetworkSecurityGroup) {
         $denyPortOk
 
     if ($denyOk) {
-        Add-Result $Check.VmNsg.$Lang "[$OkStatus] - $denyRuleName (1433, Priority 400)" "Green"
+        Add-Result $Check.VmNsg.$Lang "[$OkStatus] - $($denyRule.Name) (1433, Priority 400)" "Green"
     }
     else {
         Add-Result $Check.VmNsg.$Lang "[$ErrorStatus] - $($LabMsg.WrongDenyRule.$Lang)" "Red"
@@ -464,7 +503,7 @@ Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
 Write-Host "==================================================" -ForegroundColor Gray
 
 # ============================================================
-# REZULTATŲ FORMATAVIMAS
+# REZULTATU FORMATAVIMAS
 # ============================================================
 
 $i = 1

@@ -119,9 +119,18 @@
   },
 
   "ResourceGroups": {
-    "Infrastructure": "^RG-LAB04-.+-Infrastruktura$",
-    "Administration": "^RG-LAB04-.+-Administracija$",
-    "Warehouse": "^RG-LAB04-.+-Sandelis$"
+    "Infrastructure": {
+      "LT": "^RG-LAB04-.+-Infrastruktura$",
+      "EN": "^RG-LAB04-.+-Infrastructure$"
+    },
+    "Administration": {
+      "LT": "^RG-LAB04-.+-Administracija$",
+      "EN": "^RG-LAB04-.+-Administration$"
+    },
+    "Warehouse": {
+      "LT": "^RG-LAB04-.+-Sandelis$",
+      "EN": "^RG-LAB04-.+-Warehouse$"
+    }
   },
 
   "Networks": {
@@ -190,7 +199,7 @@
     "Rule": {
       "Name": {
         "LT": "Deny-SQL-LocalServer",
-        "EN": "Deny-SQL-Local"
+        "EN": "Deny-SQL-LocalServer"
       },
       "Port": "1433",
       "Access": "Deny",
