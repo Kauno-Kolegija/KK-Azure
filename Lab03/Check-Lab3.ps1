@@ -5,7 +5,7 @@
 # --- 1. KALBA ---
 if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
 
-# --- 2. UŽKRAUNAME BENDRAS FUNKCIJAS ---
+# --- 2. UZKRAUNAME BENDRAS FUNKCIJAS ---
 try {
     if ($PSScriptRoot) {
         . (Join-Path $PSScriptRoot '../configs/common.ps1')
@@ -19,7 +19,7 @@ catch {
     throw
 }
 
-# --- 3. INICIJUOJAME DARBĄ ---
+# --- 3. INICIJUOJAME DARBA ---
 $Setup = Initialize-Lab `
     -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/Check-Lab3-config.json" `
     -Lang $Lang
@@ -32,27 +32,46 @@ $LabName = $LocCfg.LabName.$Lang
 
 $OkStatus      = $Msg.Ok
 $ErrorStatus   = $Msg.Error
-$MissingStatus = if ($Lang -eq "EN") { "MISSING" } else { "TRŪKSTA" }
+$WarningStatus = $Msg.Warning
 
 # ============================================================
 # A. RESOURCE GROUP
 # ============================================================
 
-$targetRG = Get-AzResourceGroup |
-    Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern } |
-    Select-Object -First 1
+$targetRG = $null
+$rgText = $null
+$rgColor = "Red"
 
-if ($targetRG) {
-    $rgText  = "[$OkStatus] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
-    $rgColor = "Green"
+try {
+    $matchingRGs = @(
+        Get-AzResourceGroup -ErrorAction Stop |
+        Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern }
+    )
+
+    $targetRG = $matchingRGs | Select-Object -First 1
+
+    if ($targetRG) {
+        if ($matchingRGs.Count -gt 1) {
+            $rgText  = "[$WarningStatus] - $($targetRG.ResourceGroupName) ($($targetRG.Location)); $($LabMsg.MultipleResourceGroups.$Lang)"
+            $rgColor = "Yellow"
+        }
+        else {
+            $rgText  = "[$OkStatus] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
+            $rgColor = "Green"
+        }
+    }
+    else {
+        $rgText  = "[$ErrorStatus] - $($LabMsg.ResourceGroupNotFound.$Lang)"
+        $rgColor = "Red"
+    }
 }
-else {
-    $rgText  = "[$ErrorStatus] - $($LabMsg.ResourceGroupNotFound.$Lang)"
-    $rgColor = "Red"
+catch {
+    $rgText  = "[$WarningStatus] - $($LabMsg.ResourceGroupCheckFailed.$Lang)"
+    $rgColor = "Yellow"
 }
 
 # ============================================================
-# B. REZULTATŲ SĄRAŠAS
+# B. REZULTATU SARASAS
 # ============================================================
 
 $resourceResults = @()
@@ -68,79 +87,115 @@ $resourceResults += [PSCustomObject]@{
 # ============================================================
 
 if ($targetRG) {
-    $vm = Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName | Select-Object -First 1
+    $vm = $null
 
-    if ($vm) {
-        $actualSize = $vm.HardwareProfile.VmSize
+    try {
+        $vms = @(
+            Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction Stop
+        )
 
-        $statusObj = Get-AzVM `
-            -ResourceGroupName $targetRG.ResourceGroupName `
-            -Name $vm.Name `
-            -Status
+        $vm = $vms | Select-Object -First 1
 
-        $displayStatus = (
-            $statusObj.Statuses |
-            Where-Object Code -like "PowerState/*" |
-            Select-Object -First 1
-        ).DisplayStatus
+        if ($vm) {
+            $actualSize = $vm.HardwareProfile.VmSize
 
-        $vmText  = "[$OkStatus] - $($vm.Name) ($actualSize) [$displayStatus]"
-        $vmColor = "Green"
+            try {
+                $statusObj = Get-AzVM `
+                    -ResourceGroupName $targetRG.ResourceGroupName `
+                    -Name $vm.Name `
+                    -Status `
+                    -ErrorAction Stop
 
-        # OS diskas
-        $osDiskName = $vm.StorageProfile.OsDisk.Name
-
-        $osDisk = Get-AzDisk `
-            -ResourceGroupName $targetRG.ResourceGroupName `
-            -DiskName $osDiskName `
-            -ErrorAction SilentlyContinue
-
-        if ($osDisk) {
-            $osDiskText  = "[$OkStatus] - $($osDisk.Sku.Name)"
-            $osDiskColor = "Green"
-        }
-        else {
-            $osDiskText  = "[$MissingStatus] - $($LabMsg.OsDiskNotFound.$Lang)"
-            $osDiskColor = "Red"
-        }
-
-        # Duomenų diskai
-        $dataDisks = $vm.StorageProfile.DataDisks
-        $diskCount = @($dataDisks).Count
-
-        if ($diskCount -ge 1) {
-            $diskSizes = @()
-
-            foreach ($dataDisk in $dataDisks) {
-                if ($dataDisk.ManagedDisk.Id) {
-                    $disk = Get-AzDisk `
-                        -ResourceGroupName $targetRG.ResourceGroupName `
-                        -DiskName $dataDisk.Name `
-                        -ErrorAction SilentlyContinue
-
-                    if ($disk) {
-                        $diskSizes += "$($disk.DiskSizeGB) GiB"
-                    }
-                }
+                $displayStatus = (
+                    $statusObj.Statuses |
+                    Where-Object Code -like "PowerState/*" |
+                    Select-Object -First 1
+                ).DisplayStatus
+            }
+            catch {
+                $displayStatus = $LabMsg.StatusNotDetected.$Lang
             }
 
-            if ($diskSizes.Count -gt 0) {
-                $diskText = "[$OkStatus] - $($LabMsg.DataDiskFound.$Lang): $diskCount ($($diskSizes -join ', '))"
+            if ($vms.Count -gt 1) {
+                $vmText  = "[$WarningStatus] - $($vm.Name) ($actualSize) [$displayStatus]; $($LabMsg.MultipleVirtualMachines.$Lang)"
+                $vmColor = "Yellow"
             }
             else {
-                $diskText = "[$OkStatus] - $($LabMsg.DataDiskFound.$Lang): $diskCount"
+                $vmText  = "[$OkStatus] - $($vm.Name) ($actualSize) [$displayStatus]"
+                $vmColor = "Green"
             }
 
-            $diskColor = "Green"
+            # OS diskas
+            $osDiskName = $vm.StorageProfile.OsDisk.Name
+
+            try {
+                $osDisk = Get-AzDisk `
+                    -ResourceGroupName $targetRG.ResourceGroupName `
+                    -DiskName $osDiskName `
+                    -ErrorAction Stop
+
+                $osDiskText  = "[$OkStatus] - $($osDisk.Sku.Name)"
+                $osDiskColor = "Green"
+            }
+            catch {
+                $osDiskText  = "[$WarningStatus] - $($LabMsg.OsDiskCheckFailed.$Lang)"
+                $osDiskColor = "Yellow"
+            }
+
+            # Duomenu diskai
+            $dataDisks = @($vm.StorageProfile.DataDisks)
+            $diskCount = $dataDisks.Count
+
+            if ($diskCount -ge 1) {
+                $diskSizes = @()
+                $diskReadFailed = $false
+
+                foreach ($dataDisk in $dataDisks) {
+                    if ($dataDisk.ManagedDisk.Id) {
+                        try {
+                            $disk = Get-AzDisk `
+                                -ResourceGroupName $targetRG.ResourceGroupName `
+                                -DiskName $dataDisk.Name `
+                                -ErrorAction Stop
+
+                            $diskSizes += "$($disk.DiskSizeGB) GiB"
+                        }
+                        catch {
+                            $diskReadFailed = $true
+                        }
+                    }
+                }
+
+                if ($diskReadFailed) {
+                    $diskText  = "[$WarningStatus] - $($LabMsg.DataDiskFound.$Lang): $diskCount; $($LabMsg.DataDiskDetailsCheckFailed.$Lang)"
+                    $diskColor = "Yellow"
+                }
+                elseif ($diskSizes.Count -gt 0) {
+                    $diskText  = "[$OkStatus] - $($LabMsg.DataDiskFound.$Lang): $diskCount ($($diskSizes -join ', '))"
+                    $diskColor = "Green"
+                }
+                else {
+                    $diskText  = "[$OkStatus] - $($LabMsg.DataDiskFound.$Lang): $diskCount"
+                    $diskColor = "Green"
+                }
+            }
+            else {
+                $diskText  = "[$ErrorStatus] - $($LabMsg.DataDiskNotFound.$Lang)"
+                $diskColor = "Red"
+            }
         }
         else {
-            $diskText  = "[$MissingStatus] - $($LabMsg.DataDiskNotFound.$Lang)"
-            $diskColor = "Red"
+            $vmText      = "[$ErrorStatus] - $($LabMsg.VirtualMachineNotFound.$Lang)"
+            $vmColor     = "Red"
+            $osDiskText  = "---"
+            $osDiskColor = "Gray"
+            $diskText    = "---"
+            $diskColor   = "Gray"
         }
     }
-    else {
-        $vmText      = "[$MissingStatus] - $($LabMsg.VirtualMachineNotFound.$Lang)"
-        $vmColor     = "Red"
+    catch {
+        $vmText      = "[$WarningStatus] - $($LabMsg.VirtualMachineCheckFailed.$Lang)"
+        $vmColor     = "Yellow"
         $osDiskText  = "---"
         $osDiskColor = "Gray"
         $diskText    = "---"
@@ -171,87 +226,126 @@ if ($targetRG) {
     # D. FUNCTION APP
     # ========================================================
 
-    $funcApp = Get-AzResource `
-        -ResourceGroupName $targetRG.ResourceGroupName `
-        -ResourceType "Microsoft.Web/sites" |
-        Where-Object { $_.Kind -like "*functionapp*" } |
-        Select-Object -First 1
+    $funcApp = $null
 
-    if ($funcApp) {
-        $resourceResults += [PSCustomObject]@{
-            Name  = $Check.FunctionApp.$Lang
-            Text  = "[$OkStatus] - $($funcApp.Name)"
-            Color = "Green"
-        }
+    try {
+        $funcApps = @(
+            Get-AzResource `
+                -ResourceGroupName $targetRG.ResourceGroupName `
+                -ResourceType "Microsoft.Web/sites" `
+                -ErrorAction Stop |
+            Where-Object { $_.Kind -like "*functionapp*" }
+        )
 
-        Write-Host "   ($($LabMsg.CheckingFunctions.$Lang))" -ForegroundColor DarkGray
+        $funcApp = $funcApps | Select-Object -First 1
 
-        try {
-            $cliOutput = az functionapp function list `
-                --resource-group $targetRG.ResourceGroupName `
-                --name $funcApp.Name `
-                --output json 2>$null |
-                ConvertFrom-Json
-        }
-        catch {
+        if ($funcApp) {
+            if ($funcApps.Count -gt 1) {
+                $funcText  = "[$WarningStatus] - $($funcApp.Name); $($LabMsg.MultipleFunctionApps.$Lang)"
+                $funcColor = "Yellow"
+            }
+            else {
+                $funcText  = "[$OkStatus] - $($funcApp.Name)"
+                $funcColor = "Green"
+            }
+
+            $resourceResults += [PSCustomObject]@{
+                Name  = $Check.FunctionApp.$Lang
+                Text  = $funcText
+                Color = $funcColor
+            }
+
+            Write-Host "   ($($LabMsg.CheckingFunctions.$Lang))" -ForegroundColor DarkGray
+
+            $functionListOk = $true
             $cliOutput = @()
-        }
 
-        # HTTP funkcija
-        $fun1 = $cliOutput |
-            Where-Object {
-                $_.name -like "*/$($Setup.LastName)-fun1" -or
-                $_.name -like "*/*-fun1"
-            } |
-            Select-Object -First 1
+            try {
+                $jsonText = az functionapp function list `
+                    --resource-group $targetRG.ResourceGroupName `
+                    --name $funcApp.Name `
+                    --output json 2>$null
 
-        if ($fun1) {
-            $cleanName = $fun1.name.Split('/')[-1]
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Azure CLI returned exit code $LASTEXITCODE"
+                }
 
-            $resourceResults += [PSCustomObject]@{
-                Name  = $Check.HttpFunction.$Lang
-                Text  = "[$OkStatus] - $cleanName"
-                Color = "Green"
+                $cliOutput = @($jsonText | ConvertFrom-Json)
+            }
+            catch {
+                $functionListOk = $false
+            }
+
+            if ($functionListOk) {
+                # HTTP funkcija - mokomojoje aplinkoje pakanka pavadinimo *-fun1
+                $fun1 = $cliOutput |
+                    Where-Object { $_.name -like "*/*-fun1" } |
+                    Select-Object -First 1
+
+                if ($fun1) {
+                    $cleanName = $fun1.name.Split('/')[-1]
+                    $resourceResults += [PSCustomObject]@{
+                        Name  = $Check.HttpFunction.$Lang
+                        Text  = "[$OkStatus] - $cleanName"
+                        Color = "Green"
+                    }
+                }
+                else {
+                    $resourceResults += [PSCustomObject]@{
+                        Name  = $Check.HttpFunction.$Lang
+                        Text  = "[$ErrorStatus] - $($LabMsg.HttpFunctionNotFound.$Lang)"
+                        Color = "Red"
+                    }
+                }
+
+                # Timer funkcija - mokomojoje aplinkoje pakanka pavadinimo *-fun2
+                $fun2 = $cliOutput |
+                    Where-Object { $_.name -like "*/*-fun2" } |
+                    Select-Object -First 1
+
+                if ($fun2) {
+                    $cleanName = $fun2.name.Split('/')[-1]
+                    $resourceResults += [PSCustomObject]@{
+                        Name  = $Check.TimerFunction.$Lang
+                        Text  = "[$OkStatus] - $cleanName"
+                        Color = "Green"
+                    }
+                }
+                else {
+                    $resourceResults += [PSCustomObject]@{
+                        Name  = $Check.TimerFunction.$Lang
+                        Text  = "[$ErrorStatus] - $($LabMsg.TimerFunctionNotFound.$Lang)"
+                        Color = "Red"
+                    }
+                }
+            }
+            else {
+                $resourceResults += [PSCustomObject]@{
+                    Name  = $Check.HttpFunction.$Lang
+                    Text  = "[$WarningStatus] - $($LabMsg.FunctionListCheckFailed.$Lang)"
+                    Color = "Yellow"
+                }
+
+                $resourceResults += [PSCustomObject]@{
+                    Name  = $Check.TimerFunction.$Lang
+                    Text  = "[$WarningStatus] - $($LabMsg.FunctionListCheckFailed.$Lang)"
+                    Color = "Yellow"
+                }
             }
         }
         else {
             $resourceResults += [PSCustomObject]@{
-                Name  = $Check.HttpFunction.$Lang
-                Text  = "[$MissingStatus] - $($LabMsg.HttpFunctionNotFound.$Lang)"
-                Color = "Red"
-            }
-        }
-
-        # Timer funkcija
-        $fun2 = $cliOutput |
-            Where-Object {
-                $_.name -like "*/$($Setup.LastName)-fun2" -or
-                $_.name -like "*/*-fun2"
-            } |
-            Select-Object -First 1
-
-        if ($fun2) {
-            $cleanName = $fun2.name.Split('/')[-1]
-
-            $resourceResults += [PSCustomObject]@{
-                Name  = $Check.TimerFunction.$Lang
-                Text  = "[$OkStatus] - $cleanName"
-                Color = "Green"
-            }
-        }
-        else {
-            $resourceResults += [PSCustomObject]@{
-                Name  = $Check.TimerFunction.$Lang
-                Text  = "[$MissingStatus] - $($LabMsg.TimerFunctionNotFound.$Lang)"
+                Name  = $Check.FunctionApp.$Lang
+                Text  = "[$ErrorStatus] - $($LabMsg.FunctionAppNotFound.$Lang)"
                 Color = "Red"
             }
         }
     }
-    else {
+    catch {
         $resourceResults += [PSCustomObject]@{
             Name  = $Check.FunctionApp.$Lang
-            Text  = "[$MissingStatus] - $($LabMsg.FunctionAppNotFound.$Lang)"
-            Color = "Red"
+            Text  = "[$WarningStatus] - $($LabMsg.FunctionAppCheckFailed.$Lang)"
+            Color = "Yellow"
         }
     }
 }
@@ -286,7 +380,7 @@ Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
 Write-Host "==================================================" -ForegroundColor Gray
 
 # ============================================================
-# REZULTATŲ FORMATAVIMAS
+# REZULTATU FORMATAVIMAS
 # ============================================================
 
 $i = 1

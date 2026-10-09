@@ -3,7 +3,6 @@
     "LT": "LAB 3: Virtualūs resursai",
     "EN": "LAB 3: Virtual Resources"
   },
-
   "Checks": {
     "ResourceGroup": {
       "LT": "Resursų grupė",
@@ -34,7 +33,6 @@
       "EN": "Function (Timer)"
     }
   },
-
   "Messages": {
     "CheckingFunctions": {
       "LT": "Tikrinama funkcijų būsena...",
@@ -44,13 +42,37 @@
       "LT": "Nerasta LAB3 resursų grupė",
       "EN": "LAB3 Resource Group not found"
     },
+    "ResourceGroupCheckFailed": {
+      "LT": "Nepavyko patikrinti LAB3 resursų grupės",
+      "EN": "Failed to check the LAB3 Resource Group"
+    },
+    "MultipleResourceGroups": {
+      "LT": "rastos kelios tinkamos resursų grupės",
+      "EN": "multiple matching Resource Groups found"
+    },
     "VirtualMachineNotFound": {
       "LT": "Nerastas Virtualus Serveris",
       "EN": "Virtual Machine not found"
     },
+    "VirtualMachineCheckFailed": {
+      "LT": "Nepavyko patikrinti Virtualaus Serverio",
+      "EN": "Failed to check the Virtual Machine"
+    },
+    "MultipleVirtualMachines": {
+      "LT": "rasti keli virtualūs serveriai",
+      "EN": "multiple Virtual Machines found"
+    },
+    "StatusNotDetected": {
+      "LT": "būsena nenustatyta",
+      "EN": "status not detected"
+    },
     "OsDiskNotFound": {
       "LT": "OS diskas nerastas",
       "EN": "OS Disk not found"
+    },
+    "OsDiskCheckFailed": {
+      "LT": "Nepavyko patikrinti OS disko",
+      "EN": "Failed to check the OS Disk"
     },
     "DataDiskFound": {
       "LT": "Rasta papildomų diskų",
@@ -60,6 +82,26 @@
       "LT": "Nėra papildomo duomenų disko",
       "EN": "Additional Data Disk not found"
     },
+    "DataDiskDetailsCheckFailed": {
+      "LT": "nepavyko nuskaityti visų diskų detalių",
+      "EN": "failed to read all disk details"
+    },
+    "FunctionAppNotFound": {
+      "LT": "Nerasta Function App",
+      "EN": "Function App not found"
+    },
+    "FunctionAppCheckFailed": {
+      "LT": "Nepavyko patikrinti Function App",
+      "EN": "Failed to check Function App"
+    },
+    "MultipleFunctionApps": {
+      "LT": "rastos kelios Function App",
+      "EN": "multiple Function Apps found"
+    },
+    "FunctionListCheckFailed": {
+      "LT": "nepavyko nuskaityti funkcijų sąrašo",
+      "EN": "failed to read the function list"
+    },
     "HttpFunctionNotFound": {
       "LT": "Nerasta funkcija *-fun1",
       "EN": "Function *-fun1 not found"
@@ -68,15 +110,10 @@
       "LT": "Nerasta funkcija *-fun2",
       "EN": "Function *-fun2 not found"
     },
-    "FunctionAppNotFound": {
-      "LT": "Nerasta Function App",
-      "EN": "Function App not found"
-    },
     "NoResourceGroup": {
       "LT": "Nėra resursų grupės",
       "EN": "Resource Group not found"
     }
   },
-
   "ResourceGroupPattern": "^RG-LAB03-"
 }
