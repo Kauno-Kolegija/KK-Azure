@@ -18,7 +18,6 @@ function Get-ScriptVersion {
         return "unknown"
     }
 }
-
 # ============================================================
 # Initialize lab environment
 # ============================================================
@@ -44,7 +43,22 @@ function Initialize-Lab {
         throw
     }
 
-    $Msg = $GlobalConfig.Messages.$Lang
+    # Global JSON uses the same localization structure as laboratory configs:
+    # MessageName -> LT / EN.
+    $localizedMessages = [ordered]@{}
+
+    foreach ($property in $GlobalConfig.Messages.PSObject.Properties) {
+        $entry = $property.Value
+
+        if ($entry.PSObject.Properties.Name -contains $Lang) {
+            $localizedMessages[$property.Name] = $entry.$Lang
+        }
+        else {
+            $localizedMessages[$property.Name] = $entry
+        }
+    }
+
+    $Msg = [PSCustomObject]$localizedMessages
 
     $context = Get-AzContext
 
@@ -84,6 +98,127 @@ function Initialize-Lab {
         ScriptVersion = $ScriptVersion
     }
 }
+
+# ============================================================
+# Result status / formatting
+# ============================================================
+function Get-LabResultStyle {
+    param (
+        [Parameter(Mandatory)]
+        [ValidateSet("OK", "WARNING", "ERROR", "INFO")]
+        [string]$Status,
+
+        [Parameter(Mandatory)]
+        [object]$Messages
+    )
+
+    switch ($Status) {
+        "OK" {
+            $label = if ($Messages.Ok) { $Messages.Ok } else { "OK" }
+            $color = "Green"
+        }
+
+        "WARNING" {
+            $label = if ($Messages.Warning) { $Messages.Warning } else { "WARNING" }
+            $color = "Yellow"
+        }
+
+        "ERROR" {
+            $label = if ($Messages.Error) { $Messages.Error } else { "ERROR" }
+            $color = "Red"
+        }
+
+        "INFO" {
+            $label = if ($Messages.Info) { $Messages.Info } else { "INFO" }
+            $color = "Cyan"
+        }
+    }
+
+    return [PSCustomObject]@{
+        Label = $label
+        Color = $color
+    }
+}
+
+# ============================================================
+# Common result object creation
+# ============================================================
+function Add-LabResult {
+    param (
+        [Parameter(Mandatory)]
+        [ref]$Results,
+
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [ValidateSet("OK", "WARNING", "ERROR", "INFO")]
+        [string]$Status,
+
+        [string]$Message = "",
+
+        [Parameter(Mandatory)]
+        [object]$Messages,
+
+        [int]$Indent = 0
+    )
+
+    if ($null -eq $Results.Value) {
+        $Results.Value = @()
+    }
+
+    $style = Get-LabResultStyle `
+        -Status $Status `
+        -Messages $Messages
+
+    if ([string]::IsNullOrWhiteSpace($Message)) {
+        $text = "[$($style.Label)]"
+    }
+    else {
+        $text = "[$($style.Label)] - $Message"
+    }
+
+    $Results.Value += [PSCustomObject]@{
+        Name   = $Name
+        Text   = $text
+        Color  = $style.Color
+        Indent = $Indent
+        Status = $Status
+    }
+}
+
+# ============================================================
+# Common pattern search
+# ============================================================
+function Find-PatternMatch {
+    param (
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Items,
+
+        [Parameter(Mandatory)]
+        [string]$Property,
+
+        [Parameter(Mandatory)]
+        [string]$Pattern
+    )
+
+    $matches = @(
+        $Items | Where-Object {
+            $propertyObject = $_.PSObject.Properties[$Property]
+
+            $null -ne $propertyObject -and
+            [string]$propertyObject.Value -match $Pattern
+        }
+    )
+
+    return [PSCustomObject]@{
+        First = $matches | Select-Object -First 1
+        Count = $matches.Count
+        All   = $matches
+    }
+}
+
 # ============================================================
 # Final result renderer
 # ============================================================
@@ -95,14 +230,19 @@ function Show-LabResults {
         [Parameter(Mandatory)]
         [string]$LabName,
 
-        [Parameter(Mandatory)]
-        [array]$Results,
+        [AllowNull()]
+        [AllowEmptyCollection()]
+        [object[]]$Results = @(),
 
         [int]$LabelWidth = 35
     )
 
     $Msg = $Setup.Messages
     $date = Get-Date -Format "yyyy-MM-dd HH:mm"
+
+    if ($null -eq $Results) {
+        $Results = @()
+    }
 
     Write-Host ""
     Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
@@ -118,7 +258,8 @@ function Show-LabResults {
 
     foreach ($res in $Results) {
         $indent = 0
-        if ($null -ne $res.PSObject.Properties['Indent']) {
+
+        if ($null -ne $res.PSObject.Properties["Indent"]) {
             $indent = [int]$res.Indent
         }
 
@@ -131,7 +272,10 @@ function Show-LabResults {
         }
 
         $neededSpaces = $LabelWidth - $label.Length
-        if ($neededSpaces -lt 1) { $neededSpaces = 1 }
+
+        if ($neededSpaces -lt 1) {
+            $neededSpaces = 1
+        }
 
         Write-Host ($label + (" " * $neededSpaces)) -NoNewline
         Write-Host $res.Text -ForegroundColor $res.Color

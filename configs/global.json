@@ -1,43 +1,66 @@
 {
   "InstructorEmail": "Mantas.Bartkevicius@kaunokolegija.lt",
   "KaunoKolegija": "KAUNO KOLEGIJA",
-
   "ModuleName": {
     "LT": "DEBESŲ KOMPIUTERIJA",
     "EN": "CLOUD COMPUTING"
   },
-
   "Messages": {
-    "LT": {
-      "Running": "Vykdoma patikra...",
-      "FinalResult": "GALUTINIS REZULTATAS (Padarykite nuotrauką)",
-      "Date": "Data",
-      "Student": "Studentas",
-      "Ok": "OK",
-      "Warning": "ĮSPĖJIMAS",
-      "Error": "KLAIDA",
-      "InvalidFormat": "Netinkamas formatas",
-      "CheckFailed": "Nepavyko atlikti patikros",
-      "ConfigLoadFailed": "Nepavyko atsisiųsti konfigūracijos (JSON).",
-      "AzureNotConnected": "Neprisijungta prie Azure!",
-      "SystemIdentity": "Sisteminė tapatybė",
-      "ScriptVersion": "Skripto versija"
+    "Running": {
+      "LT": "Vykdoma patikra...",
+      "EN": "Running validation..."
     },
-
-    "EN": {
-      "Running": "Running validation...",
-      "FinalResult": "FINAL RESULT (Take a screenshot)",
-      "Date": "Date",
-      "Student": "Student",
-      "Ok": "OK",
-      "Warning": "WARNING",
-      "Error": "ERROR",
-      "InvalidFormat": "Invalid format",
-      "CheckFailed": "Validation failed",
-      "ConfigLoadFailed": "Failed to download configuration (JSON).",
-      "AzureNotConnected": "Not connected to Azure!",
-      "SystemIdentity": "System Identity",
-      "ScriptVersion": "Script version"
+    "FinalResult": {
+      "LT": "GALUTINIS REZULTATAS (Padarykite nuotrauką)",
+      "EN": "FINAL RESULT (Take a screenshot)"
+    },
+    "Date": {
+      "LT": "Data",
+      "EN": "Date"
+    },
+    "Student": {
+      "LT": "Studentas",
+      "EN": "Student"
+    },
+    "Ok": {
+      "LT": "OK",
+      "EN": "OK"
+    },
+    "Warning": {
+      "LT": "ĮSPĖJIMAS",
+      "EN": "WARNING"
+    },
+    "Error": {
+      "LT": "KLAIDA",
+      "EN": "ERROR"
+    },
+    "InvalidFormat": {
+      "LT": "Netinkamas formatas",
+      "EN": "Invalid format"
+    },
+    "CheckFailed": {
+      "LT": "Nepavyko atlikti patikros",
+      "EN": "Validation failed"
+    },
+    "ConfigLoadFailed": {
+      "LT": "Nepavyko atsisiųsti konfigūracijos (JSON).",
+      "EN": "Failed to download configuration (JSON)."
+    },
+    "AzureNotConnected": {
+      "LT": "Neprisijungta prie Azure!",
+      "EN": "Not connected to Azure!"
+    },
+    "SystemIdentity": {
+      "LT": "Sisteminė tapatybė",
+      "EN": "System Identity"
+    },
+    "ScriptVersion": {
+      "LT": "Skripto versija",
+      "EN": "Script version"
+    },
+    "Info": {
+      "LT": "INFO",
+      "EN": "INFO"
     }
   }
 }
