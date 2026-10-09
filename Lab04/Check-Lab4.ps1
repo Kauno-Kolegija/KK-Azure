@@ -20,201 +20,145 @@ catch {
 }
 
 # --- 3. INICIJUOJAME DARBA ---
-$Setup = Initialize-Lab `
-    -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json" `
-    -Lang $Lang
+$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab04/Check-Lab4-config.json" -Lang $Lang
 
-$LocCfg  = $Setup.LocalConfig
-$Check   = $LocCfg.Checks
-$LabMsg  = $LocCfg.Messages
-$Msg     = $Setup.Messages
+$LocCfg = $Setup.LocalConfig
+$Check = $LocCfg.Checks
+$LabMsg = $LocCfg.Messages
+$Msg = $Setup.Messages
 $LabName = $LocCfg.LabName.$Lang
-
-$OkStatus      = $Msg.Ok
-$ErrorStatus   = $Msg.Error
-$MissingStatus = $LabMsg.Missing.$Lang
-$WarningStatus = if ($Msg.Warning) { $Msg.Warning } else { $LabMsg.Warning.$Lang }
-
-$resourceResults = @()
+$results = @()
 
 # ============================================================
 # PAGALBINES FUNKCIJOS
 # ============================================================
 
-function Add-Result {
-    param (
-        [string]$Name,
-        [string]$Text,
-        [string]$Color = "Green"
-    )
-
-    $script:resourceResults += [PSCustomObject]@{
-        Name  = $Name
-        Text  = $Text
-        Color = $Color
-    }
-}
-
 function Get-NicFromVM {
     param ($VM)
 
-    if (-not $VM -or -not $VM.NetworkProfile.NetworkInterfaces[0].Id) {
-        return $null
-    }
+    if (-not $VM -or -not $VM.NetworkProfile.NetworkInterfaces[0].Id) { return $null }
 
-    $nicId = $VM.NetworkProfile.NetworkInterfaces[0].Id
-    $parts = $nicId -split '/'
+    $parts = $VM.NetworkProfile.NetworkInterfaces[0].Id -split '/'
+    if ($parts.Count -lt 9) { return $null }
 
-    if ($parts.Count -lt 9) {
-        return $null
-    }
-
-    Get-AzNetworkInterface `
-        -ResourceGroupName $parts[4] `
-        -Name $parts[-1] `
-        -ErrorAction SilentlyContinue
+    Get-AzNetworkInterface -ResourceGroupName $parts[4] -Name $parts[-1] -ErrorAction SilentlyContinue
 }
 
 function Test-PortRule {
-    param (
-        $Rule,
-        [string]$Port
-    )
+    param ($Rule, [string]$Port)
 
     if (-not $Rule) { return $false }
 
     $ports = @()
-
-    if ($Rule.DestinationPortRange) {
-        $ports += @($Rule.DestinationPortRange)
-    }
-
-    if ($Rule.DestinationPortRanges) {
-        $ports += @($Rule.DestinationPortRanges)
-    }
+    if ($Rule.DestinationPortRange)  { $ports += @($Rule.DestinationPortRange) }
+    if ($Rule.DestinationPortRanges) { $ports += @($Rule.DestinationPortRanges) }
 
     return ($ports -contains $Port)
 }
 
 function Get-LanguageValues {
     param ($ValueSet)
-
-    @($ValueSet.LT, $ValueSet.EN) |
-        Where-Object { $_ } |
-        Select-Object -Unique
+    @($ValueSet.LT, $ValueSet.EN) | Where-Object { $_ } | Select-Object -Unique
 }
 
 function Test-LanguagePattern {
-    param (
-        [string]$Value,
-        $PatternSet
-    )
+    param ([string]$Value, $PatternSet)
 
     foreach ($pattern in (Get-LanguageValues $PatternSet)) {
         if ($Value -match $pattern) { return $true }
     }
-
     return $false
-}
-
-function Test-LanguageName {
-    param (
-        [string]$Value,
-        $NameSet
-    )
-
-    return (Get-LanguageValues $NameSet) -contains $Value
 }
 
 # ============================================================
 # A. RESOURCE GROUPS
-# Priimami ir LT, ir EN pavadinimai nepriklausomai nuo checkerio kalbos.
+# Priimami LT ir EN pavadinimai nepriklausomai nuo checkerio kalbos
 # ============================================================
 
-$allRGs = @(Get-AzResourceGroup)
+try {
+    $allRGs = @(Get-AzResourceGroup -ErrorAction Stop)
 
-$rgInfra = $allRGs |
-    Where-Object { Test-LanguagePattern $_.ResourceGroupName $LocCfg.ResourceGroups.Infrastructure } |
-    Select-Object -First 1
+    $infraPatterns = Get-LanguageValues $LocCfg.ResourceGroups.Infrastructure
+    $adminPatterns = Get-LanguageValues $LocCfg.ResourceGroups.Administration
+    $warehousePatterns = Get-LanguageValues $LocCfg.ResourceGroups.Warehouse
 
-$rgAdmin = $allRGs |
-    Where-Object { Test-LanguagePattern $_.ResourceGroupName $LocCfg.ResourceGroups.Administration } |
-    Select-Object -First 1
+    $rgInfra = $null
+    foreach ($pattern in $infraPatterns) {
+        $m = Find-PatternMatch -Items $allRGs -Property "ResourceGroupName" -Pattern $pattern
+        if ($m.First) { $rgInfra = $m.First; break }
+    }
 
-$rgWarehouse = $allRGs |
-    Where-Object { Test-LanguagePattern $_.ResourceGroupName $LocCfg.ResourceGroups.Warehouse } |
-    Select-Object -First 1
+    $rgAdmin = $null
+    foreach ($pattern in $adminPatterns) {
+        $m = Find-PatternMatch -Items $allRGs -Property "ResourceGroupName" -Pattern $pattern
+        if ($m.First) { $rgAdmin = $m.First; break }
+    }
 
-$foundRGs = @($rgInfra, $rgAdmin, $rgWarehouse | Where-Object { $_ }).Count
-$lab04RGs = @($allRGs | Where-Object { $_.ResourceGroupName -match '^RG-LAB04-' })
+    $rgWarehouse = $null
+    foreach ($pattern in $warehousePatterns) {
+        $m = Find-PatternMatch -Items $allRGs -Property "ResourceGroupName" -Pattern $pattern
+        if ($m.First) { $rgWarehouse = $m.First; break }
+    }
 
-if ($rgInfra -and $rgAdmin -and $rgWarehouse) {
-    Add-Result $Check.ResourceGroups.$Lang "[$OkStatus] - 3/3" "Green"
+    $foundRGs = @($rgInfra, $rgAdmin, $rgWarehouse | Where-Object { $_ }).Count
+    $lab04Match = Find-PatternMatch -Items $allRGs -Property "ResourceGroupName" -Pattern '^RG-LAB04-'
+
+    if ($foundRGs -eq 3) {
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroups.$Lang -Status "OK" -Message "3/3" -Messages $Msg
+    }
+    elseif ($lab04Match.Count -ge 3) {
+        $text = $LabMsg.FoundGroups.$Lang -f $foundRGs
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroups.$Lang -Status "WARNING" -Message "$text; $($LabMsg.RgNamesWarning.$Lang)" -Messages $Msg
+    }
+    else {
+        $text = $LabMsg.FoundGroups.$Lang -f $foundRGs
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroups.$Lang -Status "ERROR" -Message $text -Messages $Msg
+    }
 }
-elseif ($lab04RGs.Count -ge 3) {
-    $text = $LabMsg.FoundGroups.$Lang -f $foundRGs
-    Add-Result $Check.ResourceGroups.$Lang "[$WarningStatus] - $text; $($LabMsg.RgNamesWarning.$Lang)" "Yellow"
-}
-else {
-    $text = $LabMsg.FoundGroups.$Lang -f $foundRGs
-    Add-Result $Check.ResourceGroups.$Lang "[$ErrorStatus] - $text" "Red"
+catch {
+    $allRGs = @()
+    $rgInfra = $rgAdmin = $rgWarehouse = $null
+    Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroups.$Lang -Status "WARNING" -Message $Msg.CheckFailed -Messages $Msg
 }
 
 # ============================================================
 # B. VNET-ADMIN
 # ============================================================
 
-$allVNets = @(Get-AzVirtualNetwork)
+try {
+    $allVNets = @(Get-AzVirtualNetwork -ErrorAction Stop)
+    $adminMatch = Find-PatternMatch -Items $allVNets -Property "Name" -Pattern "^$([regex]::Escape($LocCfg.Networks.Admin.Name))$"
+    $vnetAdmin = $adminMatch.First
 
-$vnetAdmin = $allVNets |
-    Where-Object Name -EQ $LocCfg.Networks.Admin.Name |
-    Select-Object -First 1
+    if ($vnetAdmin) {
+        $adminAddressOk = $vnetAdmin.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Admin.AddressSpace
+        $frontEnd = $vnetAdmin.Subnets | Where-Object Name -EQ $LocCfg.Networks.Admin.Subnets.FrontEnd.Name | Select-Object -First 1
+        $backEnd = $vnetAdmin.Subnets | Where-Object Name -EQ $LocCfg.Networks.Admin.Subnets.BackEnd.Name | Select-Object -First 1
 
-if ($vnetAdmin) {
-    $adminAddressOk = $vnetAdmin.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Admin.AddressSpace
+        if (-not $adminAddressOk) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.VNetAdmin.$Lang -Status "ERROR" -Message "Address space: $($vnetAdmin.AddressSpace.AddressPrefixes -join ', ')" -Messages $Msg
+        }
+        else {
+            $details = @()
+            $warning = $false
 
-    $frontEnd = $vnetAdmin.Subnets |
-        Where-Object Name -EQ $LocCfg.Networks.Admin.Subnets.FrontEnd.Name |
-        Select-Object -First 1
+            if ($frontEnd -and $frontEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.FrontEnd.Prefix) { $details += "FrontEnd $($frontEnd.AddressPrefix)" }
+            else { $details += "FrontEnd $($LabMsg.SubnetIncorrect.$Lang)"; $warning = $true }
 
-    $backEnd = $vnetAdmin.Subnets |
-        Where-Object Name -EQ $LocCfg.Networks.Admin.Subnets.BackEnd.Name |
-        Select-Object -First 1
+            if ($backEnd -and $backEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.BackEnd.Prefix) { $details += "BackEnd $($backEnd.AddressPrefix)" }
+            else { $details += "BackEnd $($LabMsg.SubnetIncorrect.$Lang)"; $warning = $true }
 
-    if (-not $adminAddressOk) {
-        $actual = $vnetAdmin.AddressSpace.AddressPrefixes -join ", "
-        Add-Result $Check.VNetAdmin.$Lang "[$ErrorStatus] - Address space: $actual" "Red"
+            Add-LabResult -Results ([ref]$results) -Name $Check.VNetAdmin.$Lang -Status $(if ($warning) { "WARNING" } else { "OK" }) -Message "$($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" -Messages $Msg
+        }
     }
     else {
-        $details = @()
-        $hasWarning = $false
-
-        if ($frontEnd -and $frontEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.FrontEnd.Prefix) {
-            $details += "FrontEnd $($frontEnd.AddressPrefix)"
-        }
-        else {
-            $details += "FrontEnd $($LabMsg.SubnetIncorrect.$Lang)"
-            $hasWarning = $true
-        }
-
-        if ($backEnd -and $backEnd.AddressPrefix -eq $LocCfg.Networks.Admin.Subnets.BackEnd.Prefix) {
-            $details += "BackEnd $($backEnd.AddressPrefix)"
-        }
-        else {
-            $details += "BackEnd $($LabMsg.SubnetIncorrect.$Lang)"
-            $hasWarning = $true
-        }
-
-        if ($hasWarning) {
-            Add-Result $Check.VNetAdmin.$Lang "[$WarningStatus] - $($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" "Yellow"
-        }
-        else {
-            Add-Result $Check.VNetAdmin.$Lang "[$OkStatus] - $($LocCfg.Networks.Admin.AddressSpace); $($details -join '; ')" "Green"
-        }
+        Add-LabResult -Results ([ref]$results) -Name $Check.VNetAdmin.$Lang -Status "ERROR" -Message $LabMsg.NetworkNotFound.$Lang -Messages $Msg
     }
 }
-else {
-    Add-Result $Check.VNetAdmin.$Lang "[$MissingStatus] - $($LabMsg.NetworkNotFound.$Lang)" "Red"
+catch {
+    $allVNets = @()
+    $vnetAdmin = $null
+    Add-LabResult -Results ([ref]$results) -Name $Check.VNetAdmin.$Lang -Status "WARNING" -Message $Msg.CheckFailed -Messages $Msg
 }
 
 # ============================================================
@@ -223,86 +167,69 @@ else {
 
 $warehouseVnetNames = Get-LanguageValues $LocCfg.Networks.Warehouse.Names
 $warehouseSubnetNames = Get-LanguageValues $LocCfg.Networks.Warehouse.Subnets.Servers.Names
-
-$vnetWarehouse = $allVNets |
-    Where-Object { $warehouseVnetNames -contains $_.Name } |
-    Select-Object -First 1
+$vnetWarehouse = $allVNets | Where-Object { $warehouseVnetNames -contains $_.Name } | Select-Object -First 1
+$serverSubnet = $null
 
 if ($vnetWarehouse) {
     $warehouseAddressOk = $vnetWarehouse.AddressSpace.AddressPrefixes -contains $LocCfg.Networks.Warehouse.AddressSpace
-
-    $serverSubnet = $vnetWarehouse.Subnets |
-        Where-Object { $warehouseSubnetNames -contains $_.Name } |
-        Select-Object -First 1
+    $serverSubnet = $vnetWarehouse.Subnets | Where-Object { $warehouseSubnetNames -contains $_.Name } | Select-Object -First 1
 
     if (-not $warehouseAddressOk) {
-        $actual = $vnetWarehouse.AddressSpace.AddressPrefixes -join ", "
-        Add-Result $Check.VNetWarehouse.$Lang "[$ErrorStatus] - Address space: $actual" "Red"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VNetWarehouse.$Lang -Status "ERROR" -Message "Address space: $($vnetWarehouse.AddressSpace.AddressPrefixes -join ', ')" -Messages $Msg
     }
     elseif ($serverSubnet -and $serverSubnet.AddressPrefix -eq $LocCfg.Networks.Warehouse.Subnets.Servers.Prefix) {
-        Add-Result $Check.VNetWarehouse.$Lang "[$OkStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($serverSubnet.AddressPrefix)" "Green"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VNetWarehouse.$Lang -Status "OK" -Message "$($LocCfg.Networks.Warehouse.AddressSpace); Servers $($serverSubnet.AddressPrefix)" -Messages $Msg
     }
     else {
-        Add-Result $Check.VNetWarehouse.$Lang "[$WarningStatus] - $($LocCfg.Networks.Warehouse.AddressSpace); Servers $($LabMsg.SubnetIncorrect.$Lang)" "Yellow"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VNetWarehouse.$Lang -Status "WARNING" -Message "$($LocCfg.Networks.Warehouse.AddressSpace); Servers $($LabMsg.SubnetIncorrect.$Lang)" -Messages $Msg
     }
 }
 else {
-    Add-Result $Check.VNetWarehouse.$Lang "[$MissingStatus] - $($LabMsg.NetworkNotFound.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.VNetWarehouse.$Lang -Status "ERROR" -Message $LabMsg.NetworkNotFound.$Lang -Messages $Msg
 }
 
 # ============================================================
 # D. VIRTUAL MACHINES
 # ============================================================
 
-$allVMs = @(Get-AzVM)
+try { $allVMs = @(Get-AzVM -ErrorAction Stop) }
+catch { $allVMs = @() }
 
-$vmAdmin = $allVMs |
-    Where-Object Name -EQ $LocCfg.VirtualMachines.Admin |
-    Select-Object -First 1
-
+$vmAdmin = $allVMs | Where-Object Name -EQ $LocCfg.VirtualMachines.Admin | Select-Object -First 1
 $warehouseVmNames = Get-LanguageValues $LocCfg.VirtualMachines.Warehouse
-
-$vmWarehouse = $allVMs |
-    Where-Object { $warehouseVmNames -contains $_.Name } |
-    Select-Object -First 1
+$vmWarehouse = $allVMs | Where-Object { $warehouseVmNames -contains $_.Name } | Select-Object -First 1
 
 $nicAdmin = Get-NicFromVM $vmAdmin
 $nicWarehouse = Get-NicFromVM $vmWarehouse
 
 if ($vmAdmin -and $nicAdmin) {
     $adminIp = $nicAdmin.IpConfigurations[0].PrivateIpAddress
-    $adminSubnetId = $nicAdmin.IpConfigurations[0].Subnet.Id
-
     $correctRG = Test-LanguagePattern $vmAdmin.ResourceGroupName $LocCfg.ResourceGroups.Administration
-    $correctSubnet = $adminSubnetId -match "/virtualNetworks/VNet-Admin/subnets/VNet-Admin-FrontEnd$"
+    $correctSubnet = $nicAdmin.IpConfigurations[0].Subnet.Id -match "/virtualNetworks/VNet-Admin/subnets/VNet-Admin-FrontEnd$"
 
     if ($correctRG -and $correctSubnet) {
-        Add-Result $Check.VmAdmin.$Lang "[$OkStatus] - $adminIp" "Green"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmAdmin.$Lang -Status "OK" -Message $adminIp -Messages $Msg
     }
     elseif ($correctSubnet -and $vmAdmin.ResourceGroupName -match '^RG-LAB04-') {
-        Add-Result $Check.VmAdmin.$Lang "[$WarningStatus] - $($LabMsg.VmRgWarning.$Lang) ($adminIp)" "Yellow"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmAdmin.$Lang -Status "WARNING" -Message "$($LabMsg.VmRgWarning.$Lang) ($adminIp)" -Messages $Msg
     }
     else {
-        Add-Result $Check.VmAdmin.$Lang "[$ErrorStatus] - $($LabMsg.WrongRgOrSubnet.$Lang) ($adminIp)" "Red"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmAdmin.$Lang -Status "ERROR" -Message "$($LabMsg.WrongRgOrSubnet.$Lang) ($adminIp)" -Messages $Msg
     }
 }
 else {
-    Add-Result $Check.VmAdmin.$Lang "[$MissingStatus] - $($LabMsg.ServerNotFound.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.VmAdmin.$Lang -Status "ERROR" -Message $LabMsg.ServerNotFound.$Lang -Messages $Msg
 }
 
 if ($vmWarehouse -and $nicWarehouse) {
     $warehouseIp = $nicWarehouse.IpConfigurations[0].PrivateIpAddress
     $warehouseSubnetId = $nicWarehouse.IpConfigurations[0].Subnet.Id
-
     $correctRG = Test-LanguagePattern $vmWarehouse.ResourceGroupName $LocCfg.ResourceGroups.Warehouse
     $correctSubnet = $false
 
     foreach ($vnetName in $warehouseVnetNames) {
         foreach ($subnetName in $warehouseSubnetNames) {
-            $escapedVnet = [regex]::Escape($vnetName)
-            $escapedSubnet = [regex]::Escape($subnetName)
-
-            if ($warehouseSubnetId -match "/virtualNetworks/$escapedVnet/subnets/$escapedSubnet$") {
+            if ($warehouseSubnetId -match "/virtualNetworks/$([regex]::Escape($vnetName))/subnets/$([regex]::Escape($subnetName))$") {
                 $correctSubnet = $true
                 break
             }
@@ -311,17 +238,17 @@ if ($vmWarehouse -and $nicWarehouse) {
     }
 
     if ($correctRG -and $correctSubnet) {
-        Add-Result $Check.VmWarehouse.$Lang "[$OkStatus] - $warehouseIp" "Green"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmWarehouse.$Lang -Status "OK" -Message $warehouseIp -Messages $Msg
     }
     elseif ($correctSubnet -and $vmWarehouse.ResourceGroupName -match '^RG-LAB04-') {
-        Add-Result $Check.VmWarehouse.$Lang "[$WarningStatus] - $($LabMsg.VmRgWarning.$Lang) ($warehouseIp)" "Yellow"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmWarehouse.$Lang -Status "WARNING" -Message "$($LabMsg.VmRgWarning.$Lang) ($warehouseIp)" -Messages $Msg
     }
     else {
-        Add-Result $Check.VmWarehouse.$Lang "[$ErrorStatus] - $($LabMsg.WrongRgOrSubnet.$Lang) ($warehouseIp)" "Red"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmWarehouse.$Lang -Status "ERROR" -Message "$($LabMsg.WrongRgOrSubnet.$Lang) ($warehouseIp)" -Messages $Msg
     }
 }
 else {
-    Add-Result $Check.VmWarehouse.$Lang "[$MissingStatus] - $($LabMsg.ServerNotFound.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.VmWarehouse.$Lang -Status "ERROR" -Message $LabMsg.ServerNotFound.$Lang -Messages $Msg
 }
 
 # ============================================================
@@ -329,54 +256,40 @@ else {
 # ============================================================
 
 if ($vnetAdmin -and $vnetWarehouse) {
-    $adminToWarehouse = $vnetAdmin.VirtualNetworkPeerings |
-        Where-Object {
-            $_.RemoteVirtualNetwork.Id -eq $vnetWarehouse.Id -and
-            $_.PeeringState -eq "Connected"
-        } |
-        Select-Object -First 1
-
-    $warehouseToAdmin = $vnetWarehouse.VirtualNetworkPeerings |
-        Where-Object {
-            $_.RemoteVirtualNetwork.Id -eq $vnetAdmin.Id -and
-            $_.PeeringState -eq "Connected"
-        } |
-        Select-Object -First 1
+    $adminToWarehouse = $vnetAdmin.VirtualNetworkPeerings | Where-Object { $_.RemoteVirtualNetwork.Id -eq $vnetWarehouse.Id -and $_.PeeringState -eq "Connected" } | Select-Object -First 1
+    $warehouseToAdmin = $vnetWarehouse.VirtualNetworkPeerings | Where-Object { $_.RemoteVirtualNetwork.Id -eq $vnetAdmin.Id -and $_.PeeringState -eq "Connected" } | Select-Object -First 1
 
     if ($adminToWarehouse -and $warehouseToAdmin) {
-        Add-Result $Check.Peering.$Lang "[$OkStatus] - $($LabMsg.PeeringConnected.$Lang)" "Green"
+        Add-LabResult -Results ([ref]$results) -Name $Check.Peering.$Lang -Status "OK" -Message $LabMsg.PeeringConnected.$Lang -Messages $Msg
     }
     else {
-        Add-Result $Check.Peering.$Lang "[$ErrorStatus] - $($LabMsg.PeeringNotConnected.$Lang)" "Red"
+        Add-LabResult -Results ([ref]$results) -Name $Check.Peering.$Lang -Status "ERROR" -Message $LabMsg.PeeringNotConnected.$Lang -Messages $Msg
     }
 }
 else {
-    Add-Result $Check.Peering.$Lang "[$MissingStatus] - $($LabMsg.MissingVnet.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.Peering.$Lang -Status "ERROR" -Message $LabMsg.MissingVnet.$Lang -Messages $Msg
 }
 
 # ============================================================
 # F. APPLICATION SECURITY GROUP
 # ============================================================
 
-$asg = Get-AzApplicationSecurityGroup -ErrorAction SilentlyContinue |
-    Where-Object Name -EQ $LocCfg.ApplicationSecurityGroup |
-    Select-Object -First 1
+$asg = Get-AzApplicationSecurityGroup -ErrorAction SilentlyContinue | Where-Object Name -EQ $LocCfg.ApplicationSecurityGroup | Select-Object -First 1
 
 if ($asg -and $nicWarehouse) {
     $asgIds = @($nicWarehouse.IpConfigurations.ApplicationSecurityGroups.Id)
-
     if ($asgIds -contains $asg.Id) {
-        Add-Result $Check.Asg.$Lang "[$OkStatus] - $($LabMsg.VmAssigned.$Lang)" "Green"
+        Add-LabResult -Results ([ref]$results) -Name $Check.Asg.$Lang -Status "OK" -Message $LabMsg.VmAssigned.$Lang -Messages $Msg
     }
     else {
-        Add-Result $Check.Asg.$Lang "[$ErrorStatus] - $($LabMsg.VmNotAssigned.$Lang)" "Red"
+        Add-LabResult -Results ([ref]$results) -Name $Check.Asg.$Lang -Status "ERROR" -Message $LabMsg.VmNotAssigned.$Lang -Messages $Msg
     }
 }
 elseif ($asg) {
-    Add-Result $Check.Asg.$Lang "[$ErrorStatus] - $($LabMsg.AsgVmMissing.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.Asg.$Lang -Status "ERROR" -Message $LabMsg.AsgVmMissing.$Lang -Messages $Msg
 }
 else {
-    Add-Result $Check.Asg.$Lang "[$MissingStatus] - $($LabMsg.AsgMissing.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.Asg.$Lang -Status "ERROR" -Message $LabMsg.AsgMissing.$Lang -Messages $Msg
 }
 
 # ============================================================
@@ -384,177 +297,104 @@ else {
 # ============================================================
 
 $subnetNsgNames = Get-LanguageValues $LocCfg.SubnetNSG.Names
-
-$subnetNsg = Get-AzNetworkSecurityGroup -ErrorAction SilentlyContinue |
-    Where-Object { $subnetNsgNames -contains $_.Name } |
-    Select-Object -First 1
-
-$subnetNsgAssociated = $false
-
-if ($serverSubnet -and $serverSubnet.NetworkSecurityGroup -and $subnetNsg) {
-    $subnetNsgAssociated = $serverSubnet.NetworkSecurityGroup.Id -eq $subnetNsg.Id
-}
+$subnetNsg = Get-AzNetworkSecurityGroup -ErrorAction SilentlyContinue | Where-Object { $subnetNsgNames -contains $_.Name } | Select-Object -First 1
+$subnetNsgAssociated = $serverSubnet -and $serverSubnet.NetworkSecurityGroup -and $subnetNsg -and ($serverSubnet.NetworkSecurityGroup.Id -eq $subnetNsg.Id)
 
 if (-not $subnetNsg) {
-    Add-Result $Check.SubnetNsg.$Lang "[$MissingStatus] - $($LocCfg.SubnetNSG.Names.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.SubnetNsg.$Lang -Status "ERROR" -Message $LocCfg.SubnetNSG.Names.$Lang -Messages $Msg
 }
 elseif (-not $subnetNsgAssociated) {
-    Add-Result $Check.SubnetNsg.$Lang "[$ErrorStatus] - $($LabMsg.SubnetNsgNotAssociated.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.SubnetNsg.$Lang -Status "ERROR" -Message $LabMsg.SubnetNsgNotAssociated.$Lang -Messages $Msg
 }
 else {
-    $sqlRule = $subnetNsg.SecurityRules |
-        Where-Object Name -EQ $LocCfg.SubnetNSG.SqlRule.Name |
-        Select-Object -First 1
-
+    $sqlRule = $subnetNsg.SecurityRules | Where-Object Name -EQ $LocCfg.SubnetNSG.SqlRule.Name | Select-Object -First 1
     $sqlRuleExactName = [bool]$sqlRule
 
     if (-not $sqlRule) {
-        $sqlRule = $subnetNsg.SecurityRules |
-            Where-Object {
-                $_.Access -eq $LocCfg.SubnetNSG.SqlRule.Access -and
-                $_.Priority -eq $LocCfg.SubnetNSG.SqlRule.Priority -and
-                $_.Direction -eq "Inbound" -and
-                (Test-PortRule $_ $LocCfg.SubnetNSG.SqlRule.Port)
-            } |
-            Select-Object -First 1
+        $sqlRule = $subnetNsg.SecurityRules | Where-Object {
+            $_.Access -eq $LocCfg.SubnetNSG.SqlRule.Access -and
+            $_.Priority -eq $LocCfg.SubnetNSG.SqlRule.Priority -and
+            $_.Direction -eq "Inbound" -and
+            (Test-PortRule $_ $LocCfg.SubnetNSG.SqlRule.Port)
+        } | Select-Object -First 1
     }
 
-    $sqlPortOk = Test-PortRule $sqlRule $LocCfg.SubnetNSG.SqlRule.Port
+    $sqlAsgIds = if ($sqlRule) { @($sqlRule.DestinationApplicationSecurityGroups.Id) } else { @() }
+    $sqlOk = $sqlRule -and $sqlRule.Access -eq $LocCfg.SubnetNSG.SqlRule.Access -and $sqlRule.Priority -eq $LocCfg.SubnetNSG.SqlRule.Priority -and $sqlRule.Direction -eq "Inbound" -and (Test-PortRule $sqlRule $LocCfg.SubnetNSG.SqlRule.Port) -and ($asg -and $sqlAsgIds -contains $asg.Id)
 
-    $sqlAsgOk = $false
-    if ($sqlRule -and $asg) {
-        $sqlAsgIds = @($sqlRule.DestinationApplicationSecurityGroups.Id)
-        $sqlAsgOk = $sqlAsgIds -contains $asg.Id
-    }
-
-    $sqlOk =
-        $sqlRule -and
-        $sqlRule.Access -eq $LocCfg.SubnetNSG.SqlRule.Access -and
-        $sqlRule.Priority -eq $LocCfg.SubnetNSG.SqlRule.Priority -and
-        $sqlRule.Direction -eq "Inbound" -and
-        $sqlPortOk -and
-        $sqlAsgOk
-
-    $pingRule = $subnetNsg.SecurityRules |
-        Where-Object Name -EQ $LocCfg.SubnetNSG.PingRule.Name |
-        Select-Object -First 1
-
+    $pingRule = $subnetNsg.SecurityRules | Where-Object Name -EQ $LocCfg.SubnetNSG.PingRule.Name | Select-Object -First 1
     $pingRuleExactName = [bool]$pingRule
 
     if (-not $pingRule) {
-        $pingRule = $subnetNsg.SecurityRules |
-            Where-Object {
-                $_.Access -eq $LocCfg.SubnetNSG.PingRule.Access -and
-                $_.Priority -eq $LocCfg.SubnetNSG.PingRule.Priority -and
-                $_.Direction -eq "Inbound" -and
-                $_.Protocol -in @("Icmp", "IcmpV4", "ICMP", "ICMPv4")
-            } |
-            Select-Object -First 1
+        $pingRule = $subnetNsg.SecurityRules | Where-Object {
+            $_.Access -eq $LocCfg.SubnetNSG.PingRule.Access -and
+            $_.Priority -eq $LocCfg.SubnetNSG.PingRule.Priority -and
+            $_.Direction -eq "Inbound" -and
+            $_.Protocol -in @("Icmp", "IcmpV4", "ICMP", "ICMPv4")
+        } | Select-Object -First 1
     }
 
-    $pingProtocolOk = $false
-    if ($pingRule) {
-        $pingProtocolOk = $pingRule.Protocol -in @("Icmp", "IcmpV4", "ICMP", "ICMPv4")
-    }
-
-    $pingAsgOk = $false
-    if ($pingRule -and $asg) {
-        $pingAsgIds = @($pingRule.DestinationApplicationSecurityGroups.Id)
-        $pingAsgOk = $pingAsgIds -contains $asg.Id
-    }
-
-    $pingOk =
-        $pingRule -and
-        $pingRule.Access -eq $LocCfg.SubnetNSG.PingRule.Access -and
-        $pingRule.Priority -eq $LocCfg.SubnetNSG.PingRule.Priority -and
-        $pingRule.Direction -eq "Inbound" -and
-        $pingProtocolOk -and
-        $pingAsgOk
+    $pingAsgIds = if ($pingRule) { @($pingRule.DestinationApplicationSecurityGroups.Id) } else { @() }
+    $pingOk = $pingRule -and $pingRule.Access -eq $LocCfg.SubnetNSG.PingRule.Access -and $pingRule.Priority -eq $LocCfg.SubnetNSG.PingRule.Priority -and $pingRule.Direction -eq "Inbound" -and $pingRule.Protocol -in @("Icmp", "IcmpV4", "ICMP", "ICMPv4") -and ($asg -and $pingAsgIds -contains $asg.Id)
 
     if ($sqlOk -and $pingOk) {
         if ($sqlRuleExactName -and $pingRuleExactName) {
-            Add-Result $Check.SubnetNsg.$Lang "[$OkStatus] - Allow-SQL, Allow-Ping" "Green"
+            Add-LabResult -Results ([ref]$results) -Name $Check.SubnetNsg.$Lang -Status "OK" -Message "Allow-SQL, Allow-Ping" -Messages $Msg
         }
         else {
-            $actualNames = @($sqlRule.Name, $pingRule.Name) -join ", "
-            Add-Result $Check.SubnetNsg.$Lang "[$WarningStatus] - $actualNames; $($LabMsg.RuleNameWarning.$Lang)" "Yellow"
+            Add-LabResult -Results ([ref]$results) -Name $Check.SubnetNsg.$Lang -Status "WARNING" -Message "$($sqlRule.Name), $($pingRule.Name); $($LabMsg.RuleNameWarning.$Lang)" -Messages $Msg
         }
     }
     else {
         $problems = @()
-
         if (-not $sqlOk) { $problems += "Allow-SQL" }
         if (-not $pingOk) { $problems += "Allow-Ping" }
-
-        Add-Result $Check.SubnetNsg.$Lang "[$ErrorStatus] - $($LabMsg.CheckRules.$Lang): $($problems -join ', ')" "Red"
+        Add-LabResult -Results ([ref]$results) -Name $Check.SubnetNsg.$Lang -Status "ERROR" -Message "$($LabMsg.CheckRules.$Lang): $($problems -join ', ')" -Messages $Msg
     }
 }
+
 # ============================================================
 # H. VM NIC NSG
 # ============================================================
 
 if ($nicWarehouse -and $nicWarehouse.NetworkSecurityGroup) {
-    $vmNsgId = $nicWarehouse.NetworkSecurityGroup.Id
-    $parts = $vmNsgId -split '/'
-
-    $vmNsg = Get-AzNetworkSecurityGroup `
-        -ResourceGroupName $parts[4] `
-        -Name $parts[-1] `
-        -ErrorAction SilentlyContinue
-
+    $parts = $nicWarehouse.NetworkSecurityGroup.Id -split '/'
+    $vmNsg = Get-AzNetworkSecurityGroup -ResourceGroupName $parts[4] -Name $parts[-1] -ErrorAction SilentlyContinue
     $denyRuleNames = Get-LanguageValues $LocCfg.VmNSG.Rule.Name
 
-    $denyRule = $vmNsg.SecurityRules |
-        Where-Object { $denyRuleNames -contains $_.Name } |
-        Select-Object -First 1
-
+    $denyRule = $vmNsg.SecurityRules | Where-Object { $denyRuleNames -contains $_.Name } | Select-Object -First 1
     $denyRuleExactName = [bool]$denyRule
 
     if (-not $denyRule) {
-        $denyRule = $vmNsg.SecurityRules |
-            Where-Object {
-                $_.Access -eq $LocCfg.VmNSG.Rule.Access -and
-                $_.Priority -eq $LocCfg.VmNSG.Rule.Priority -and
-                $_.Direction -eq "Inbound" -and
-                (Test-PortRule $_ $LocCfg.VmNSG.Rule.Port)
-            } |
-            Select-Object -First 1
+        $denyRule = $vmNsg.SecurityRules | Where-Object {
+            $_.Access -eq $LocCfg.VmNSG.Rule.Access -and
+            $_.Priority -eq $LocCfg.VmNSG.Rule.Priority -and
+            $_.Direction -eq "Inbound" -and
+            (Test-PortRule $_ $LocCfg.VmNSG.Rule.Port)
+        } | Select-Object -First 1
     }
 
-    $denyPortOk = Test-PortRule $denyRule $LocCfg.VmNSG.Rule.Port
+    $denyOk = $denyRule -and $denyRule.Access -eq $LocCfg.VmNSG.Rule.Access -and $denyRule.Priority -eq $LocCfg.VmNSG.Rule.Priority -and $denyRule.Direction -eq "Inbound" -and (Test-PortRule $denyRule $LocCfg.VmNSG.Rule.Port)
 
-    $denyOk =
-        $denyRule -and
-        $denyRule.Access -eq $LocCfg.VmNSG.Rule.Access -and
-        $denyRule.Priority -eq $LocCfg.VmNSG.Rule.Priority -and
-        $denyRule.Direction -eq "Inbound" -and
-        $denyPortOk
-
-    if ($denyOk) {
-        if ($denyRuleExactName) {
-            Add-Result $Check.VmNsg.$Lang "[$OkStatus] - $($denyRule.Name) (1433, Priority 400)" "Green"
-        }
-        else {
-            Add-Result $Check.VmNsg.$Lang "[$WarningStatus] - $($denyRule.Name) (1433, Priority 400); $($LabMsg.RuleNameWarning.$Lang)" "Yellow"
-        }
+    if ($denyOk -and $denyRuleExactName) {
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmNsg.$Lang -Status "OK" -Message "$($denyRule.Name) (1433, Priority 400)" -Messages $Msg
+    }
+    elseif ($denyOk) {
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmNsg.$Lang -Status "WARNING" -Message "$($denyRule.Name) (1433, Priority 400); $($LabMsg.RuleNameWarning.$Lang)" -Messages $Msg
     }
     else {
-        Add-Result $Check.VmNsg.$Lang "[$ErrorStatus] - $($LabMsg.WrongDenyRule.$Lang)" "Red"
+        Add-LabResult -Results ([ref]$results) -Name $Check.VmNsg.$Lang -Status "ERROR" -Message $LabMsg.WrongDenyRule.$Lang -Messages $Msg
     }
 }
 elseif ($nicWarehouse) {
-    Add-Result $Check.VmNsg.$Lang "[$MissingStatus] - $($LabMsg.NicNoNsg.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.VmNsg.$Lang -Status "ERROR" -Message $LabMsg.NicNoNsg.$Lang -Messages $Msg
 }
 else {
-    Add-Result $Check.VmNsg.$Lang "[$MissingStatus] - $($LabMsg.ServerNotFound.$Lang)" "Red"
+    Add-LabResult -Results ([ref]$results) -Name $Check.VmNsg.$Lang -Status "ERROR" -Message $LabMsg.ServerNotFound.$Lang -Messages $Msg
 }
 
 # ============================================================
 # GALUTINIS REZULTATAS
 # ============================================================
 
-Show-LabResults `
-    -Setup $Setup `
-    -LabName $LabName `
-    -Results $results `
-    -LabelWidth 30
+Show-LabResults -Setup $Setup -LabName $LabName -Results $results -LabelWidth 30
