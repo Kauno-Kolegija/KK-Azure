@@ -3,7 +3,6 @@
     "LT": "LAB 6: Saugyklos paslaugos",
     "EN": "LAB 6: Storage Services"
   },
-
   "Checks": {
     "ResourceGroup": {
       "LT": "Resursų grupė",
@@ -38,7 +37,6 @@
       "EN": "VM-Storage"
     }
   },
-
   "Messages": {
     "Found": {
       "LT": "Rasta",
@@ -87,33 +85,63 @@
     "VmBad": {
       "LT": "VM-Storage nerasta RG-LAB06-VM-only",
       "EN": "VM-Storage was not found in RG-LAB06-VM-only"
+    },
+    "ResourceGroupCheckFailed": {
+      "LT": "Nepavyko patikrinti LAB06 resursų grupės",
+      "EN": "Failed to check the LAB06 Resource Group"
+    },
+    "StorageCheckFailed": {
+      "LT": "Nepavyko patikrinti Storage Account",
+      "EN": "Failed to check the Storage Account"
+    },
+    "ProtectionCheckFailed": {
+      "LT": "Nepavyko patikrinti Data Protection nustatymų",
+      "EN": "Failed to check Data Protection settings"
+    },
+    "ContainersCheckFailed": {
+      "LT": "Nepavyko patikrinti Blob konteinerių",
+      "EN": "Failed to check Blob containers"
+    },
+    "FilesCheckFailed": {
+      "LT": "Nepavyko patikrinti Azure Files / Snapshot",
+      "EN": "Failed to check Azure Files / Snapshot"
+    },
+    "FirewallCheckFailed": {
+      "LT": "Nepavyko patikrinti Storage Firewall / VNet",
+      "EN": "Failed to check Storage Firewall / VNet"
+    },
+    "VmCheckFailed": {
+      "LT": "Nepavyko patikrinti VM-Storage",
+      "EN": "Failed to check VM-Storage"
+    },
+    "MultipleResourceGroups": {
+      "LT": "rastos kelios tinkamos LAB06 resursų grupės",
+      "EN": "multiple matching LAB06 Resource Groups found"
+    },
+    "MultipleStorageAccounts": {
+      "LT": "rasti keli Storage Account su „store“ pavadinime",
+      "EN": "multiple Storage Accounts with \"store\" in the name found"
     }
   },
-
   "ResourceGroup": {
     "Pattern": "^RG-LAB06-(?!VM-only$).+$"
   },
-
   "StorageAccount": {
     "NamePattern": "store",
     "Sku": "Standard_LRS",
     "AccessTier": "Cool"
   },
-
   "Blob": {
     "StudentContainerPattern": "0blob1$",
     "StaticWebsiteContainer": "$web",
     "StorageExplorerContainer": "svarbus-duomenys-azure"
   },
-
   "AzureFiles": {
     "ShareName": "imones-duomenys"
   },
-
   "Network": {
     "DefaultAction": "Deny"
   },
-
   "VirtualMachine": {
     "Name": "VM-Storage",
     "ResourceGroupName": "RG-LAB06-VM-only"
