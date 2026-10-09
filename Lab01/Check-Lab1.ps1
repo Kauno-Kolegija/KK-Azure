@@ -267,32 +267,8 @@ catch {
 # ============================================================
 # GALUTINIS REZULTATAS
 # ============================================================
-$date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
-Write-Host ""
-Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host $Setup.HeaderTitle
-Write-Host $LabName -ForegroundColor Yellow
-Write-Host "$($Msg.Date): $date"
-Write-Host "$($Msg.Student): $studentEmail"
-Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
-Write-Host "==================================================" -ForegroundColor Gray
-
-Write-Host ("1. {0,-27}" -f ($TxtAccount + ":")) -NoNewline
-Write-Host $res0Text -ForegroundColor $res0Color
-
-Write-Host ("2. {0,-27}" -f ($TxtSubscriptionName + ":")) -NoNewline
-Write-Host $res1Text -ForegroundColor $res1Color
-
-Write-Host ("3. {0,-27}" -f ($TxtInstructorAccess + ":")) -NoNewline
-Write-Host $res2Text -ForegroundColor $res2Color
-
-Write-Host ("4. {0,-27}" -f ($TxtBudget + ":")) -NoNewline
-Write-Host $res3Text -ForegroundColor $res3Color
-
-Write-Host ("5. {0,-27}" -f ($TxtAllowedLocations + ":")) -NoNewline
-Write-Host $res4Text -ForegroundColor $res4Color
-
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host ""
+Show-LabResults `
+    -Setup $Setup `
+    -LabName $LabName `
+    -Results $results

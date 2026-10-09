@@ -382,39 +382,8 @@ catch {
 # GALUTINIS REZULTATAS
 # ============================================================
 
-$date = Get-Date -Format "yyyy-MM-dd HH:mm"
-
-Write-Host ""
-Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host $Setup.HeaderTitle
-Write-Host $LabName -ForegroundColor Yellow
-Write-Host "$($Msg.Date): $date"
-Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
-Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
-Write-Host "==================================================" -ForegroundColor Gray
-
-$mainNumber = 1
-
-foreach ($res in $results) {
-    if ($res.Indent -eq 1) {
-        $label = "   $($res.Name):"
-    }
-    else {
-        $label = "$mainNumber. $($res.Name):"
-        $mainNumber++
-    }
-
-    $targetWidth = 39
-    $spaces = $targetWidth - $label.Length
-
-    if ($spaces -lt 1) {
-        $spaces = 1
-    }
-
-    Write-Host ($label + (" " * $spaces)) -NoNewline
-    Write-Host $res.Text -ForegroundColor $res.Color
-}
-
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host ""
+Show-LabResults `
+    -Setup $Setup `
+    -LabName $LabName `
+    -Results $results `
+    -LabelWidth 39

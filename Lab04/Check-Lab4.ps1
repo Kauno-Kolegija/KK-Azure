@@ -553,37 +553,8 @@ else {
 # GALUTINIS REZULTATAS
 # ============================================================
 
-$date = Get-Date -Format "yyyy-MM-dd HH:mm"
-
-Write-Host ""
-Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host $Setup.HeaderTitle
-Write-Host $LabName -ForegroundColor Yellow
-Write-Host "$($Msg.Date): $date"
-Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
-Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
-Write-Host "==================================================" -ForegroundColor Gray
-
-# ============================================================
-# REZULTATU FORMATAVIMAS
-# ============================================================
-
-$i = 1
-
-foreach ($res in $resourceResults) {
-    $label = "$i. $($res.Name):"
-    $i++
-
-    $targetWidth = 30
-    $neededSpaces = $targetWidth - $label.Length
-    if ($neededSpaces -lt 1) { $neededSpaces = 1 }
-
-    $padding = " " * $neededSpaces
-
-    Write-Host "$label$padding" -NoNewline
-    Write-Host $res.Text -ForegroundColor $res.Color
-}
-
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host ""
+Show-LabResults `
+    -Setup $Setup `
+    -LabName $LabName `
+    -Results $results `
+    -LabelWidth 30

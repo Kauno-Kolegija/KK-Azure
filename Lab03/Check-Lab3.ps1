@@ -380,29 +380,11 @@ Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
 Write-Host "==================================================" -ForegroundColor Gray
 
 # ============================================================
-# REZULTATU FORMATAVIMAS
+# GALUTINIS REZULTATAS
 # ============================================================
 
-$i = 1
-
-foreach ($res in $resourceResults) {
-    if ($res.Name -match "^ -") {
-        $label = "   $($res.Name):"
-    }
-    else {
-        $label = "$i. $($res.Name):"
-        $i++
-    }
-
-    $targetWidth = 30
-    $neededSpaces = $targetWidth - $label.Length
-    if ($neededSpaces -lt 1) { $neededSpaces = 1 }
-
-    $padding = " " * $neededSpaces
-
-    Write-Host "$label$padding" -NoNewline
-    Write-Host $res.Text -ForegroundColor $res.Color
-}
-
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host ""
+Show-LabResults `
+    -Setup $Setup `
+    -LabName $LabName `
+    -Results $results `
+    -LabelWidth 30
