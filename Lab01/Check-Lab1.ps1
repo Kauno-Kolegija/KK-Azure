@@ -10,7 +10,10 @@ try {
         . (Join-Path $PSScriptRoot '../configs/common.ps1')
     }
     else {
-        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
+        Invoke-RestMethod `
+            'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' `
+            -ErrorAction Stop |
+            Invoke-Expression
     }
 }
 catch {
@@ -19,7 +22,9 @@ catch {
 }
 
 # --- 2. KALBA ---
-if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
+if ($Lang -notin @("LT", "EN")) {
+    $Lang = "LT"
+}
 
 # --- 3. INICIJUOJAME DARBA ---
 $Setup = Initialize-Lab `
@@ -28,8 +33,7 @@ $Setup = Initialize-Lab `
 
 $GlobCfg = $Setup.GlobalConfig
 $LocCfg  = $Setup.LocalConfig
-
-$Msg     = $GlobCfg.Messages.$Lang
+$Msg     = $Setup.Messages
 $LabMsg  = $LocCfg.Messages
 $LabName = $LocCfg.LabName.$Lang
 
@@ -40,29 +44,41 @@ $TxtBudget           = $LocCfg.Checks.Budget.$Lang
 $TxtAllowedLocations = $LocCfg.Checks.AllowedLocations.$Lang
 
 $studentEmail = $Setup.StudentEmail
-$context      = Get-AzContext
+$context = Get-AzContext
 $subscriptionId = $context.Subscription.Id
 $subscriptionScope = "/subscriptions/$subscriptionId"
 
+$results = @()
 
 # ============================================================
 # A. STUDENTO PASKYROS TIKRINIMAS
 # ============================================================
 try {
     if ($studentEmail -match '(?i)@itm\.kaunokolegija\.lt$') {
-        $res0Text  = "[$($Msg.Ok)] - $studentEmail"
-        $res0Color = "Green"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtAccount `
+            -Status "OK" `
+            -Message $studentEmail `
+            -Messages $Msg
     }
     else {
-        $res0Text  = "[$($Msg.Error)] - $($LabMsg.InvalidAccount.$Lang): $studentEmail"
-        $res0Color = "Red"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtAccount `
+            -Status "ERROR" `
+            -Message "$($LabMsg.InvalidAccount.$Lang): $studentEmail" `
+            -Messages $Msg
     }
 }
 catch {
-    $res0Text  = "[$($Msg.Warning)] - $($LabMsg.AccountCheckFailed.$Lang)"
-    $res0Color = "Yellow"
+    Add-LabResult `
+        -Results ([ref]$results) `
+        -Name $TxtAccount `
+        -Status "WARNING" `
+        -Message $LabMsg.AccountCheckFailed.$Lang `
+        -Messages $Msg
 }
-
 
 # ============================================================
 # B. PRENUMERATOS PAVADINIMO TIKRINIMAS
@@ -70,26 +86,35 @@ catch {
 try {
     $subName = $context.Subscription.Name
 
-    # Priimami abu formatai nepriklausomai nuo pasirinktos kalbos:
-    # LT: KT4-Mantas-Bartkevicius / KT-4-Mantas-Bartkevicius
-    # EN: Erasmus-John-Smith
+    # Priimami abu formatai nepriklausomai nuo pasirinktos kalbos.
     $isLtFormat = $subName -match $LocCfg.NamingPatterns.LT
     $isEnFormat = $subName -match $LocCfg.NamingPatterns.EN
 
     if ($isLtFormat -or $isEnFormat) {
-        $res1Text  = "[$($Msg.Ok)] - $subName"
-        $res1Color = "Green"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtSubscriptionName `
+            -Status "OK" `
+            -Message $subName `
+            -Messages $Msg
     }
     else {
-        $res1Text  = "[$($Msg.Error)] - $subName ($($LabMsg.InvalidSubscriptionFormat.$Lang))"
-        $res1Color = "Red"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtSubscriptionName `
+            -Status "ERROR" `
+            -Message "$subName ($($LabMsg.InvalidSubscriptionFormat.$Lang))" `
+            -Messages $Msg
     }
 }
 catch {
-    $res1Text  = "[$($Msg.Warning)] - $($LabMsg.SubscriptionCheckFailed.$Lang)"
-    $res1Color = "Yellow"
+    Add-LabResult `
+        -Results ([ref]$results) `
+        -Name $TxtSubscriptionName `
+        -Status "WARNING" `
+        -Message $LabMsg.SubscriptionCheckFailed.$Lang `
+        -Messages $Msg
 }
-
 
 # ============================================================
 # C. DESTYTOJO TEISIU TIKRINIMAS
@@ -113,7 +138,8 @@ try {
     )
 
     $instructorAtSubscription = @(
-        $instructorAssignments | Where-Object { $_.Scope -eq $subscriptionScope }
+        $instructorAssignments |
+        Where-Object { $_.Scope -eq $subscriptionScope }
     ) | Select-Object -First 1
 
     if ($instructorAtSubscription) {
@@ -127,56 +153,83 @@ try {
             $displayName = $LabMsg.InstructorFallbackName.$Lang
         }
 
-        $otherCount = @($allContributors | Where-Object {
-            -not ($_.SignInName -and $_.SignInName -ieq $GlobCfg.InstructorEmail)
-        }).Count
+        $otherCount = @(
+            $allContributors | Where-Object {
+                -not ($_.SignInName -and $_.SignInName -ieq $GlobCfg.InstructorEmail)
+            }
+        ).Count
 
         $suffix = if ($otherCount -gt 0) {
             " " + ($LabMsg.OtherContributors.$Lang -f $otherCount)
-        } else { "" }
+        }
+        else {
+            ""
+        }
 
-        $res2Text  = "[$($Msg.Ok)] - ${displayName}${suffix}"
-        $res2Color = "Green"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtInstructorAccess `
+            -Status "OK" `
+            -Message "${displayName}${suffix}" `
+            -Messages $Msg
     }
     elseif ($instructorAssignments.Count -gt 0) {
-        # Dėstytojas rastas, bet Contributor suteiktas siauresneje apimtyje.
         $firstInstructor = $instructorAssignments | Select-Object -First 1
+
         $displayName = if ($firstInstructor.DisplayName) {
             $firstInstructor.DisplayName
-        } elseif ($firstInstructor.SignInName) {
+        }
+        elseif ($firstInstructor.SignInName) {
             $firstInstructor.SignInName
-        } else {
+        }
+        else {
             $LabMsg.InstructorFallbackName.$Lang
         }
 
-        $res2Text  = "[$($Msg.Warning)] - $displayName ($($LabMsg.InstructorWrongScope.$Lang): $($firstInstructor.Scope))"
-        $res2Color = "Yellow"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtInstructorAccess `
+            -Status "WARNING" `
+            -Message "$displayName ($($LabMsg.InstructorWrongScope.$Lang): $($firstInstructor.Scope))" `
+            -Messages $Msg
     }
     elseif ($allContributors.Count -gt 0) {
-        # Contributor priskirtas, bet ne destytojui.
         $firstOther = $allContributors | Select-Object -First 1
+
         $otherName = if ($firstOther.DisplayName) {
             $firstOther.DisplayName
-        } elseif ($firstOther.SignInName) {
+        }
+        elseif ($firstOther.SignInName) {
             $firstOther.SignInName
-        } else {
+        }
+        else {
             $LabMsg.OtherUserFallbackName.$Lang
         }
 
-        $res2Text  = "[$($Msg.Warning)] - $otherName ($($LabMsg.InstructorNotFound.$Lang))"
-        $res2Color = "Yellow"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtInstructorAccess `
+            -Status "WARNING" `
+            -Message "$otherName ($($LabMsg.InstructorNotFound.$Lang))" `
+            -Messages $Msg
     }
     else {
-        $res2Text  = "[$($Msg.Error)] - $($LabMsg.NoContributorFound.$Lang)"
-        $res2Color = "Red"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtInstructorAccess `
+            -Status "ERROR" `
+            -Message $LabMsg.NoContributorFound.$Lang `
+            -Messages $Msg
     }
 }
 catch {
-    # Technine patikros problema nera studento darbo klaida.
-    $res2Text  = "[$($Msg.Warning)] - $($LabMsg.RoleCheckFailed.$Lang): $($_.Exception.Message)"
-    $res2Color = "Yellow"
+    Add-LabResult `
+        -Results ([ref]$results) `
+        -Name $TxtInstructorAccess `
+        -Status "WARNING" `
+        -Message "$($LabMsg.RoleCheckFailed.$Lang): $($_.Exception.Message)" `
+        -Messages $Msg
 }
-
 
 # ============================================================
 # D. BUDGET TIKRINIMAS
@@ -194,7 +247,11 @@ try {
         $budgetUri = "https://management.azure.com/providers/Microsoft.Billing/billingAccounts/$($account.name)/providers/Microsoft.Consumption/budgets?api-version=2024-08-01"
 
         try {
-            $budgetResponse = Invoke-AzRestMethod -Method GET -Uri $budgetUri -ErrorAction Stop
+            $budgetResponse = Invoke-AzRestMethod `
+                -Method GET `
+                -Uri $budgetUri `
+                -ErrorAction Stop
+
             $budgets = @((($budgetResponse.Content | ConvertFrom-Json).value))
 
             if ($budgets.Count -gt 0) {
@@ -208,20 +265,31 @@ try {
 
     if ($foundBudgets.Count -gt 0) {
         $budgetNames = $foundBudgets | ForEach-Object { $_.name }
-        $res3Text  = "[$($Msg.Ok)] - " + ($budgetNames -join ", ")
-        $res3Color = "Green"
+
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtBudget `
+            -Status "OK" `
+            -Message ($budgetNames -join ", ") `
+            -Messages $Msg
     }
     else {
-        $res3Text  = "[$($Msg.Error)] - $($LabMsg.BudgetNotFound.$Lang)"
-        $res3Color = "Red"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtBudget `
+            -Status "ERROR" `
+            -Message $LabMsg.BudgetNotFound.$Lang `
+            -Messages $Msg
     }
 }
 catch {
-    # Technine klaida -> Warning, nes nezinome, ar Budget tikrai neegzistuoja.
-    $res3Text  = "[$($Msg.Warning)] - $($LabMsg.BudgetCheckFailed.$Lang): $($_.Exception.Message)"
-    $res3Color = "Yellow"
+    Add-LabResult `
+        -Results ([ref]$results) `
+        -Name $TxtBudget `
+        -Status "WARNING" `
+        -Message "$($LabMsg.BudgetCheckFailed.$Lang): $($_.Exception.Message)" `
+        -Messages $Msg
 }
-
 
 # ============================================================
 # E. LEIDZIAMU AZURE REGIONU NUSTATYMAS
@@ -229,7 +297,11 @@ catch {
 try {
     $policyUri = "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Authorization/policyAssignments?api-version=2026-06-01&`$filter=atScope()"
 
-    $policyResponse = Invoke-AzRestMethod -Method GET -Uri $policyUri -ErrorAction Stop
+    $policyResponse = Invoke-AzRestMethod `
+        -Method GET `
+        -Uri $policyUri `
+        -ErrorAction Stop
+
     $policyAssignments = @((($policyResponse.Content | ConvertFrom-Json).value))
     $allowedLocations = @()
 
@@ -250,61 +322,34 @@ try {
     $allowedLocations = @($allowedLocations | Sort-Object -Unique)
 
     if ($allowedLocations.Count -gt 0) {
-        $res4Text  = "[INFO] - " + ($allowedLocations -join ", ")
-        $res4Color = "Cyan"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtAllowedLocations `
+            -Status "INFO" `
+            -Message ($allowedLocations -join ", ") `
+            -Messages $Msg
     }
     else {
-        $res4Text  = "[INFO] - $($LabMsg.AllowedLocationsNotFound.$Lang)"
-        $res4Color = "Yellow"
+        Add-LabResult `
+            -Results ([ref]$results) `
+            -Name $TxtAllowedLocations `
+            -Status "INFO" `
+            -Message $LabMsg.AllowedLocationsNotFound.$Lang `
+            -Messages $Msg
     }
 }
 catch {
-    $res4Text  = "[INFO] - $($LabMsg.AllowedLocationsCheckFailed.$Lang): $($_.Exception.Message)"
-    $res4Color = "Yellow"
+    Add-LabResult `
+        -Results ([ref]$results) `
+        -Name $TxtAllowedLocations `
+        -Status "INFO" `
+        -Message "$($LabMsg.AllowedLocationsCheckFailed.$Lang): $($_.Exception.Message)" `
+        -Messages $Msg
 }
-
 
 # ============================================================
 # GALUTINIS REZULTATAS
 # ============================================================
-
-$results = @(
-    [PSCustomObject]@{
-        Name   = $TxtAccount
-        Text   = $res0Text
-        Color  = $res0Color
-        Indent = 0
-    }
-
-    [PSCustomObject]@{
-        Name   = $TxtSubscriptionName
-        Text   = $res1Text
-        Color  = $res1Color
-        Indent = 0
-    }
-
-    [PSCustomObject]@{
-        Name   = $TxtInstructorAccess
-        Text   = $res2Text
-        Color  = $res2Color
-        Indent = 0
-    }
-
-    [PSCustomObject]@{
-        Name   = $TxtBudget
-        Text   = $res3Text
-        Color  = $res3Color
-        Indent = 0
-    }
-
-    [PSCustomObject]@{
-        Name   = $TxtAllowedLocations
-        Text   = $res4Text
-        Color  = $res4Color
-        Indent = 0
-    }
-)
-
 Show-LabResults `
     -Setup $Setup `
     -LabName $LabName `
