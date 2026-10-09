@@ -17,31 +17,23 @@ try {
     }
 }
 catch {
-    # Kalbų konfigūracija dar neužkrauta
     Write-Error "Failed to load common functions."
     throw
 }
-
 
 # --- 2. KALBA ---
 if ($Lang -notin @("LT", "EN")) {
     $Lang = "LT"
 }
 
-
 # --- 3. INICIJUOJAME DARBĄ ---
 $Setup = Initialize-Lab `
     -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab02/Check-Lab2-config.json" `
     -Lang $Lang
 
-$GlobCfg = $Setup.GlobalConfig
-$LocCfg  = $Setup.LocalConfig
-
-# Bendri tekstai
-$Msg = $Setup.Messages
-
-# LAB2 tekstai
-$LabMsg  = $LocCfg.Messages
+$LocCfg = $Setup.LocalConfig
+$Msg    = $Setup.Messages
+$LabMsg = $LocCfg.Messages
 $LabName = $LocCfg.LabName.$Lang
 
 $TxtResourceGroup = $LocCfg.Checks.ResourceGroup.$Lang
@@ -49,38 +41,43 @@ $TxtWebApp        = $LocCfg.Checks.WebApp.$Lang
 $TxtRuntime       = $LocCfg.Checks.Runtime.$Lang
 $TxtAppService    = $LocCfg.Checks.AppServicePlan.$Lang
 $TxtStorage       = $LocCfg.Checks.StorageAccount.$Lang
+$TxtCloudShellRG  = $LocCfg.Checks.CloudShellResourceGroup.$Lang
+$TxtCloudShellSA  = $LocCfg.Checks.CloudShellStorage.$Lang
 
+$results = @()
 
 # ============================================================
 # A. RESOURCE GROUP
 # ============================================================
 
-$targetRG = Get-AzResourceGroup |
-    Where-Object {
-        $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern
-    } |
-    Select-Object -First 1
+try {
+    $matchingRGs = @(
+        Get-AzResourceGroup -ErrorAction Stop |
+        Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern }
+    )
 
+    $targetRG = $matchingRGs | Select-Object -First 1
 
-if ($targetRG) {
-    $rgText =
-        "[$($Msg.Ok)] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
-
-    $rgColor = "Green"
+    if ($targetRG) {
+        if ($matchingRGs.Count -gt 1) {
+            $rgText = "[$($Msg.Warning)] - $($targetRG.ResourceGroupName) ($($targetRG.Location)); $($LabMsg.MultipleResourceGroups.$Lang)"
+            $rgColor = "Yellow"
+        }
+        else {
+            $rgText = "[$($Msg.Ok)] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
+            $rgColor = "Green"
+        }
+    }
+    else {
+        $rgText = "[$($Msg.Error)] - $($LabMsg.ResourceGroupNotFound.$Lang)"
+        $rgColor = "Red"
+    }
 }
-else {
-    $rgText =
-        "[$($Msg.Error)] - $($LabMsg.ResourceGroupNotFound.$Lang)"
-
-    $rgColor = "Red"
+catch {
+    $targetRG = $null
+    $rgText = "[$($Msg.Warning)] - $($LabMsg.ResourceGroupCheckFailed.$Lang)"
+    $rgColor = "Yellow"
 }
-
-
-# ============================================================
-# REZULTATŲ MASYVAS
-# ============================================================
-
-$results = @()
 
 $results += [PSCustomObject]@{
     Name   = $TxtResourceGroup
@@ -89,263 +86,190 @@ $results += [PSCustomObject]@{
     Indent = 0
 }
 
-
 # ============================================================
-# B. WEB APP
+# B. WEB APP + RUNTIME + APP SERVICE PLAN
 # ============================================================
 
 if ($targetRG) {
-
-    $webApp = Get-AzWebApp `
-        -ResourceGroupName $targetRG.ResourceGroupName `
-        -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-
-
-    if ($webApp) {
-
-        # ----------------------------------------------------
-        # Web App pagrindinė eilutė
-        # ----------------------------------------------------
-
-        $results += [PSCustomObject]@{
-            Name   = $TxtWebApp
-            Text   = "[$($Msg.Ok)] - $($webApp.Name) ($($webApp.Location))"
-            Color  = "Green"
-            Indent = 0
-        }
-
-
-        # ----------------------------------------------------
-        # Runtime
-        # ----------------------------------------------------
-
-        $runtime = $webApp.SiteConfig.NetFrameworkVersion
-
-        if ($runtime) {
-
-            $runtimeVersion = $runtime -replace '^v', ''
-
-            if ($runtimeVersion -match "^$($LocCfg.ExpectedWebApp.Runtime)(\.|$)") {
-
-                $runtimeText =
-                    "[$($Msg.Ok)] - .NET $($LocCfg.ExpectedWebApp.Runtime)"
-
-                $runtimeColor = "Green"
-            }
-            else {
-                $runtimeText =
-                    "[$($Msg.Error)] - $runtime"
-
-                $runtimeColor = "Yellow"
-            }
-        }
-        else {
-            $runtimeText =
-                "[$($Msg.Error)] - $($LabMsg.RuntimeNotDetected.$Lang)"
-
-            $runtimeColor = "Yellow"
-        }
-
-
-        $results += [PSCustomObject]@{
-            Name   = $TxtRuntime
-            Text   = $runtimeText
-            Color  = $runtimeColor
-            Indent = 1
-        }
-
-
-        # ----------------------------------------------------
-        # App Service Plan
-        # ----------------------------------------------------
-
-        try {
-
-            $planName = Split-Path $webApp.ServerFarmId -Leaf
-
-            $plan = Get-AzAppServicePlan `
+    try {
+        $webApps = @(
+            Get-AzWebApp `
                 -ResourceGroupName $targetRG.ResourceGroupName `
-                -Name $planName `
                 -ErrorAction Stop
+        )
 
+        $webApp = $webApps | Select-Object -First 1
 
-            $planOS = if ($plan.Reserved) {
-                "Linux"
+        if ($webApp) {
+            if ($webApps.Count -gt 1) {
+                $webText = "[$($Msg.Warning)] - $($webApp.Name) ($($webApp.Location)); $($LabMsg.MultipleResources.$Lang)"
+                $webColor = "Yellow"
             }
             else {
-                "Windows"
+                $webText = "[$($Msg.Ok)] - $($webApp.Name) ($($webApp.Location))"
+                $webColor = "Green"
             }
-
-
-            $skuName = $plan.Sku.Name
-            $skuTier = $plan.Sku.Tier
-
-
-            $planDisplay =
-                "$skuTier $skuName / $planOS"
-
-
-            $planOk =
-                ($skuName -eq $LocCfg.ExpectedWebApp.PlanSku) -and
-                ($skuTier -eq $LocCfg.ExpectedWebApp.PlanTier) -and
-                ($planOS -eq $LocCfg.ExpectedWebApp.OperatingSystem)
-
-
-            if ($planOk) {
-                $planText =
-                    "[$($Msg.Ok)] - $planDisplay"
-
-                $planColor = "Green"
-            }
-            else {
-                $planText =
-                    "[$($Msg.Error)] - $planDisplay"
-
-                $planColor = "Yellow"
-            }
-        }
-        catch {
-            $planText =
-                "[$($Msg.Error)] - $($LabMsg.PlanNotDetected.$Lang)"
-
-            $planColor = "Yellow"
-        }
-
-
-        $results += [PSCustomObject]@{
-            Name   = $TxtAppService
-            Text   = $planText
-            Color  = $planColor
-            Indent = 1
-        }
-    }
-    else {
-
-        $results += [PSCustomObject]@{
-            Name   = $TxtWebApp
-            Text   = "[$($LabMsg.MissingStatus.$Lang)] - $($LabMsg.ResourceNotFound.$Lang)"
-            Color  = "Red"
-            Indent = 0
-        }
-    }
-
-
-    # ========================================================
-    # C. STORAGE ACCOUNT
-    # ========================================================
-
-    $storage = Get-AzStorageAccount `
-        -ResourceGroupName $targetRG.ResourceGroupName `
-        -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-
-
-    if ($storage) {
-
-        $storageSku = $storage.Sku.Name
-
-        if ($storageSku -eq $LocCfg.ExpectedStorageSku) {
-            $storageColor = "Green"
-            $storageStatus = $Msg.Ok
-        }
-        else {
-            $storageColor = "Yellow"
-            $storageStatus = $Msg.Error
-        }
-
-
-        $storageText =
-            "[$storageStatus] - " +
-            "$($storage.StorageAccountName) " +
-            "($($storage.Location)) " +
-            "[$storageSku]"
-
-
-        $results += [PSCustomObject]@{
-            Name   = $TxtStorage
-            Text   = $storageText
-            Color  = $storageColor
-            Indent = 0
-        }
-    }
-    else {
-
-        $results += [PSCustomObject]@{
-            Name   = $TxtStorage
-            Text   = "[$($LabMsg.MissingStatus.$Lang)] - $($LabMsg.ResourceNotFound.$Lang)"
-            Color  = "Red"
-            Indent = 0
-        }
-    }
-
-    # ============================================================
-    # D. CLOUD SHELL RESOURCE GROUP
-    # ============================================================
-
-    $cloudShellRG = Get-AzResourceGroup |
-        Where-Object {
-            $_.ResourceGroupName -match $LocCfg.CloudShell.ResourceGroupPattern
-        } |
-        Select-Object -First 1
-
-
-    if ($cloudShellRG) {
-
-        $results += [PSCustomObject]@{
-            Name   = $LocCfg.Checks.CloudShellResourceGroup.$Lang
-            Text   = "[$($Msg.Ok)] - $($cloudShellRG.ResourceGroupName) ($($cloudShellRG.Location))"
-            Color  = "Green"
-            Indent = 0
-        }
-
-
-        $cloudShellStorage = Get-AzStorageAccount `
-            -ResourceGroupName $cloudShellRG.ResourceGroupName `
-            -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-
-
-        if ($cloudShellStorage) {
 
             $results += [PSCustomObject]@{
-                Name   = $LocCfg.Checks.CloudShellStorage.$Lang
-                Text   = "[$($Msg.Ok)] - $($cloudShellStorage.StorageAccountName) ($($cloudShellStorage.Location)) [$($cloudShellStorage.Sku.Name)]"
-                Color  = "Green"
+                Name   = $TxtWebApp
+                Text   = $webText
+                Color  = $webColor
                 Indent = 0
             }
-        }
-        else {
+
+            # Runtime
+            $runtime = $webApp.SiteConfig.NetFrameworkVersion
+
+            if ($runtime) {
+                $runtimeVersion = $runtime -replace '^v', ''
+
+                if ($runtimeVersion -match "^$($LocCfg.ExpectedWebApp.Runtime)(\.|$)") {
+                    $runtimeText = "[$($Msg.Ok)] - .NET $($LocCfg.ExpectedWebApp.Runtime)"
+                    $runtimeColor = "Green"
+                }
+                else {
+                    $runtimeText = "[$($Msg.Warning)] - $runtime"
+                    $runtimeColor = "Yellow"
+                }
+            }
+            else {
+                $runtimeText = "[$($Msg.Warning)] - $($LabMsg.RuntimeNotDetected.$Lang)"
+                $runtimeColor = "Yellow"
+            }
 
             $results += [PSCustomObject]@{
-                Name   = $LocCfg.Checks.CloudShellStorage.$Lang
-                Text   = "[$($LabMsg.MissingStatus.$Lang)] - $($LabMsg.ResourceNotFound.$Lang)"
+                Name   = $TxtRuntime
+                Text   = $runtimeText
+                Color  = $runtimeColor
+                Indent = 1
+            }
+
+            # App Service Plan
+            try {
+                $planName = Split-Path $webApp.ServerFarmId -Leaf
+
+                $plan = Get-AzAppServicePlan `
+                    -ResourceGroupName $targetRG.ResourceGroupName `
+                    -Name $planName `
+                    -ErrorAction Stop
+
+                $planOS = if ($plan.Reserved) { "Linux" } else { "Windows" }
+                $skuName = $plan.Sku.Name
+                $skuTier = $plan.Sku.Tier
+                $planDisplay = "$skuTier $skuName / $planOS"
+
+                $planOk =
+                    ($skuName -eq $LocCfg.ExpectedWebApp.PlanSku) -and
+                    ($skuTier -eq $LocCfg.ExpectedWebApp.PlanTier) -and
+                    ($planOS -eq $LocCfg.ExpectedWebApp.OperatingSystem)
+
+                if ($planOk) {
+                    $planText = "[$($Msg.Ok)] - $planDisplay"
+                    $planColor = "Green"
+                }
+                else {
+                    $planText = "[$($Msg.Warning)] - $planDisplay"
+                    $planColor = "Yellow"
+                }
+            }
+            catch {
+                $planText = "[$($Msg.Warning)] - $($LabMsg.PlanNotDetected.$Lang)"
+                $planColor = "Yellow"
+            }
+
+            $results += [PSCustomObject]@{
+                Name   = $TxtAppService
+                Text   = $planText
+                Color  = $planColor
+                Indent = 1
+            }
+        }
+        else {
+            $results += [PSCustomObject]@{
+                Name   = $TxtWebApp
+                Text   = "[$($Msg.Error)] - $($LabMsg.ResourceNotFound.$Lang)"
                 Color  = "Red"
                 Indent = 0
             }
         }
     }
-    else {
-
+    catch {
         $results += [PSCustomObject]@{
-            Name   = $LocCfg.Checks.CloudShellResourceGroup.$Lang
-            Text   = "[$($LabMsg.MissingStatus.$Lang)] - $($LabMsg.ResourceNotFound.$Lang)"
-            Color  = "Red"
+            Name   = $TxtWebApp
+            Text   = "[$($Msg.Warning)] - $($LabMsg.WebAppCheckFailed.$Lang)"
+            Color  = "Yellow"
+            Indent = 0
+        }
+    }
+
+    # ========================================================
+    # C. STORAGE ACCOUNT
+    # ========================================================
+
+    try {
+        $storageAccounts = @(
+            Get-AzStorageAccount `
+                -ResourceGroupName $targetRG.ResourceGroupName `
+                -ErrorAction Stop
+        )
+
+        $storage = $storageAccounts | Select-Object -First 1
+
+        if ($storage) {
+            $storageSku = $storage.Sku.Name
+
+            if ($storageSku -eq $LocCfg.ExpectedStorageSku) {
+                $storageStatus = $Msg.Ok
+                $storageColor = "Green"
+            }
+            else {
+                $storageStatus = $Msg.Warning
+                $storageColor = "Yellow"
+            }
+
+            $storageText =
+                "[$storageStatus] - " +
+                "$($storage.StorageAccountName) " +
+                "($($storage.Location)) " +
+                "[$storageSku]"
+
+            if ($storageAccounts.Count -gt 1) {
+                $storageText += "; $($LabMsg.MultipleResources.$Lang)"
+                $storageColor = "Yellow"
+            }
+
+            $results += [PSCustomObject]@{
+                Name   = $TxtStorage
+                Text   = $storageText
+                Color  = $storageColor
+                Indent = 0
+            }
+        }
+        else {
+            $results += [PSCustomObject]@{
+                Name   = $TxtStorage
+                Text   = "[$($Msg.Error)] - $($LabMsg.ResourceNotFound.$Lang)"
+                Color  = "Red"
+                Indent = 0
+            }
+        }
+    }
+    catch {
+        $results += [PSCustomObject]@{
+            Name   = $TxtStorage
+            Text   = "[$($Msg.Warning)] - $($LabMsg.StorageCheckFailed.$Lang)"
+            Color  = "Yellow"
             Indent = 0
         }
     }
 }
 else {
-
-    # Jei nėra RG, kitų resursų netikriname
-
     $results += [PSCustomObject]@{
         Name   = $TxtWebApp
         Text   = "[$($Msg.Error)] - $($LabMsg.NoResourceGroup.$Lang)"
         Color  = "Gray"
         Indent = 0
     }
-
 
     $results += [PSCustomObject]@{
         Name   = $TxtStorage
@@ -355,6 +279,104 @@ else {
     }
 }
 
+# ============================================================
+# D. CLOUD SHELL
+# Tikrinama nepriklausomai nuo pagrindinės LAB02 RG
+# ============================================================
+
+try {
+    $cloudShellRGs = @(
+        Get-AzResourceGroup -ErrorAction Stop |
+        Where-Object {
+            $_.ResourceGroupName -match $LocCfg.CloudShell.ResourceGroupPattern
+        }
+    )
+
+    $cloudShellRG = $cloudShellRGs | Select-Object -First 1
+
+    if ($cloudShellRG) {
+        if ($cloudShellRGs.Count -gt 1) {
+            $cloudShellRgText = "[$($Msg.Warning)] - $($cloudShellRG.ResourceGroupName) ($($cloudShellRG.Location)); $($LabMsg.MultipleResourceGroups.$Lang)"
+            $cloudShellRgColor = "Yellow"
+        }
+        else {
+            $cloudShellRgText = "[$($Msg.Ok)] - $($cloudShellRG.ResourceGroupName) ($($cloudShellRG.Location))"
+            $cloudShellRgColor = "Green"
+        }
+
+        $results += [PSCustomObject]@{
+            Name   = $TxtCloudShellRG
+            Text   = $cloudShellRgText
+            Color  = $cloudShellRgColor
+            Indent = 0
+        }
+
+        try {
+            $cloudShellStorageAccounts = @(
+                Get-AzStorageAccount `
+                    -ResourceGroupName $cloudShellRG.ResourceGroupName `
+                    -ErrorAction Stop
+            )
+
+            $cloudShellStorage = $cloudShellStorageAccounts | Select-Object -First 1
+
+            if ($cloudShellStorage) {
+                $cloudShellStorageText =
+                    "[$($Msg.Ok)] - $($cloudShellStorage.StorageAccountName) " +
+                    "($($cloudShellStorage.Location)) [$($cloudShellStorage.Sku.Name)]"
+
+                $cloudShellStorageColor = "Green"
+
+                if ($cloudShellStorageAccounts.Count -gt 1) {
+                    $cloudShellStorageText =
+                        "[$($Msg.Warning)] - $($cloudShellStorage.StorageAccountName) " +
+                        "($($cloudShellStorage.Location)) [$($cloudShellStorage.Sku.Name)]; " +
+                        "$($LabMsg.MultipleResources.$Lang)"
+                    $cloudShellStorageColor = "Yellow"
+                }
+
+                $results += [PSCustomObject]@{
+                    Name   = $TxtCloudShellSA
+                    Text   = $cloudShellStorageText
+                    Color  = $cloudShellStorageColor
+                    Indent = 0
+                }
+            }
+            else {
+                $results += [PSCustomObject]@{
+                    Name   = $TxtCloudShellSA
+                    Text   = "[$($Msg.Error)] - $($LabMsg.ResourceNotFound.$Lang)"
+                    Color  = "Red"
+                    Indent = 0
+                }
+            }
+        }
+        catch {
+            $results += [PSCustomObject]@{
+                Name   = $TxtCloudShellSA
+                Text   = "[$($Msg.Warning)] - $($LabMsg.CloudShellStorageCheckFailed.$Lang)"
+                Color  = "Yellow"
+                Indent = 0
+            }
+        }
+    }
+    else {
+        $results += [PSCustomObject]@{
+            Name   = $TxtCloudShellRG
+            Text   = "[$($Msg.Error)] - $($LabMsg.ResourceNotFound.$Lang)"
+            Color  = "Red"
+            Indent = 0
+        }
+    }
+}
+catch {
+    $results += [PSCustomObject]@{
+        Name   = $TxtCloudShellRG
+        Text   = "[$($Msg.Warning)] - $($LabMsg.CloudShellCheckFailed.$Lang)"
+        Color  = "Yellow"
+        Indent = 0
+    }
+}
 
 # ============================================================
 # GALUTINIS REZULTATAS
@@ -364,24 +386,17 @@ $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
 Write-Host ""
 Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
-
-Write-Host "==================================================" `
-    -ForegroundColor Gray
-
+Write-Host "==================================================" -ForegroundColor Gray
 Write-Host $Setup.HeaderTitle
 Write-Host $LabName -ForegroundColor Yellow
-
 Write-Host "$($Msg.Date): $date"
 Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
 Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
-Write-Host "==================================================" `
-    -ForegroundColor Gray
-
+Write-Host "==================================================" -ForegroundColor Gray
 
 $mainNumber = 1
 
 foreach ($res in $results) {
-
     if ($res.Indent -eq 1) {
         $label = "   $($res.Name):"
     }
@@ -390,24 +405,16 @@ foreach ($res in $results) {
         $mainNumber++
     }
 
-
     $targetWidth = 39
-
     $spaces = $targetWidth - $label.Length
 
     if ($spaces -lt 1) {
         $spaces = 1
     }
 
-
     Write-Host ($label + (" " * $spaces)) -NoNewline
-
-    Write-Host $res.Text `
-        -ForegroundColor $res.Color
+    Write-Host $res.Text -ForegroundColor $res.Color
 }
 
-
-Write-Host "==================================================" `
-    -ForegroundColor Gray
-
+Write-Host "==================================================" -ForegroundColor Gray
 Write-Host ""

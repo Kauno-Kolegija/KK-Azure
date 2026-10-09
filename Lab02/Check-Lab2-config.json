@@ -3,88 +3,99 @@
     "LT": "LAB 2: Azure Įrankiai ir Resursai",
     "EN": "LAB 2: Azure Tools and Resources"
   },
-
   "Checks": {
     "ResourceGroup": {
       "LT": "Resursų grupė",
       "EN": "Resource Group"
     },
-
     "WebApp": {
       "LT": "Web App (Svetainė)",
       "EN": "Web App"
     },
-
     "Runtime": {
       "LT": "Runtime",
       "EN": "Runtime"
     },
-
     "AppServicePlan": {
       "LT": "App Service Plan",
       "EN": "App Service Plan"
     },
-
     "StorageAccount": {
       "LT": "Storage Account (Saugykla)",
       "EN": "Storage Account"
     },
-
     "CloudShellResourceGroup": {
       "LT": "Cloud Shell resursų grupė",
       "EN": "Cloud Shell Resource Group"
     },
-
     "CloudShellStorage": {
       "LT": "Cloud Shell Storage Account",
       "EN": "Cloud Shell Storage Account"
     }
   },
-
   "Messages": {
     "MissingStatus": {
       "LT": "TRŪKSTA",
       "EN": "MISSING"
     },
-
     "ResourceNotFound": {
       "LT": "Nerastas resursas",
       "EN": "Resource not found"
     },
-
     "ResourceGroupNotFound": {
       "LT": "Nerasta LAB2 resursų grupė",
       "EN": "LAB2 Resource Group not found"
     },
-
     "NoResourceGroup": {
       "LT": "Nėra resursų grupės",
       "EN": "Resource Group not found"
     },
-
     "RuntimeNotDetected": {
       "LT": "Nepavyko nustatyti Runtime",
       "EN": "Failed to detect Runtime"
     },
-
     "PlanNotDetected": {
       "LT": "Nepavyko nustatyti App Service Plan",
       "EN": "Failed to detect App Service Plan"
+    },
+    "ResourceGroupCheckFailed": {
+      "LT": "Nepavyko patikrinti LAB2 resursų grupės",
+      "EN": "Failed to check the LAB2 Resource Group"
+    },
+    "WebAppCheckFailed": {
+      "LT": "Nepavyko patikrinti Web App",
+      "EN": "Failed to check Web App"
+    },
+    "StorageCheckFailed": {
+      "LT": "Nepavyko patikrinti Storage Account",
+      "EN": "Failed to check Storage Account"
+    },
+    "CloudShellCheckFailed": {
+      "LT": "Nepavyko patikrinti Cloud Shell resursų grupės",
+      "EN": "Failed to check the Cloud Shell Resource Group"
+    },
+    "CloudShellStorageCheckFailed": {
+      "LT": "Nepavyko patikrinti Cloud Shell Storage Account",
+      "EN": "Failed to check the Cloud Shell Storage Account"
+    },
+    "MultipleResourceGroups": {
+      "LT": "rastos kelios tinkamos resursų grupės",
+      "EN": "multiple matching Resource Groups found"
+    },
+    "MultipleResources": {
+      "LT": "rasti keli tinkami resursai",
+      "EN": "multiple matching resources found"
     }
   },
-
   "ResourceGroupPattern": "^RG-LAB02-",
-
   "CloudShell": {
     "ResourceGroupPattern": "^RG-.*-CloudShell$"
   },
-
   "ExpectedWebApp": {
     "Runtime": "10",
     "PlanTier": "Shared",
     "PlanSku": "D1",
     "OperatingSystem": "Windows"
   },
-
   "ExpectedStorageSku": "Standard_LRS"
 }
