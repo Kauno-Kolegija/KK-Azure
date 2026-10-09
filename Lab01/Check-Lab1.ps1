@@ -1,10 +1,10 @@
 # ============================================================
 # LAB 1 tikrinimo skriptas
-# Kalba pagal nutylėjimą: LT
-# EN kalbą nustato Check-Lab1-EN.ps1 paleidiklis
+# Kalba pagal nutylejima: LT
+# EN kalba nustato Check-Lab1-EN.ps1 paleidiklis
 # ============================================================
 
-# --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
+# --- 1. UZKRAUNAME BENDRAS FUNKCIJAS ---
 try {
     if ($PSScriptRoot) {
         . (Join-Path $PSScriptRoot '../configs/common.ps1')
@@ -21,7 +21,7 @@ catch {
 # --- 2. KALBA ---
 if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
 
-# --- 3. INICIJUOJAME DARBĄ ---
+# --- 3. INICIJUOJAME DARBA ---
 $Setup = Initialize-Lab `
     -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab01/Check-Lab1-config.json" `
     -Lang $Lang
@@ -40,12 +40,14 @@ $TxtBudget           = $LocCfg.Checks.Budget.$Lang
 $TxtAllowedLocations = $LocCfg.Checks.AllowedLocations.$Lang
 
 $studentEmail = $Setup.StudentEmail
+$context      = Get-AzContext
+$subscriptionId = $context.Subscription.Id
+$subscriptionScope = "/subscriptions/$subscriptionId"
 
 
 # ============================================================
 # A. STUDENTO PASKYROS TIKRINIMAS
 # ============================================================
-
 try {
     if ($studentEmail -match '(?i)@itm\.kaunokolegija\.lt$') {
         $res0Text  = "[$($Msg.Ok)] - $studentEmail"
@@ -57,26 +59,24 @@ try {
     }
 }
 catch {
-    $res0Text  = "[$($Msg.Error)] - $($LabMsg.AccountCheckFailed.$Lang)"
-    $res0Color = "Red"
+    $res0Text  = "[$($Msg.Warning)] - $($LabMsg.AccountCheckFailed.$Lang)"
+    $res0Color = "Yellow"
 }
 
 
 # ============================================================
 # B. PRENUMERATOS PAVADINIMO TIKRINIMAS
 # ============================================================
-
 try {
-    $subName = (Get-AzContext).Subscription.Name
+    $subName = $context.Subscription.Name
 
     # Priimami abu formatai nepriklausomai nuo pasirinktos kalbos:
     # LT: KT4-Mantas-Bartkevicius / KT-4-Mantas-Bartkevicius
     # EN: Erasmus-John-Smith
     $isLtFormat = $subName -match $LocCfg.NamingPatterns.LT
     $isEnFormat = $subName -match $LocCfg.NamingPatterns.EN
-    $isNameCorrect = $isLtFormat -or $isEnFormat
 
-    if ($isNameCorrect) {
+    if ($isLtFormat -or $isEnFormat) {
         $res1Text  = "[$($Msg.Ok)] - $subName"
         $res1Color = "Green"
     }
@@ -86,77 +86,84 @@ try {
     }
 }
 catch {
-    $res1Text  = "[$($Msg.Error)] - $($LabMsg.InvalidSubscriptionFormat.$Lang)"
-    $res1Color = "Red"
+    $res1Text  = "[$($Msg.Warning)] - $($LabMsg.SubscriptionCheckFailed.$Lang)"
+    $res1Color = "Yellow"
 }
 
 
 # ============================================================
-# C. DĖSTYTOJO TEISIŲ TIKRINIMAS
+# C. DESTYTOJO TEISIU TIKRINIMAS
 # ============================================================
-
 try {
-    $assignments = Get-AzRoleAssignment -ErrorAction SilentlyContinue
-    $allContributors = @()
+    $assignments = @(Get-AzRoleAssignment -ErrorAction Stop)
 
-    if ($assignments) {
-        foreach ($a in $assignments) {
-            $isContributor = $a.RoleDefinitionName -eq $LocCfg.RoleToCheck
-            $isStudent = $a.SignInName -and $studentEmail -and ($a.SignInName -ieq $studentEmail)
-
-            if ($isContributor -and -not $isStudent) {
-                $allContributors += $a
-            }
+    # Visi Contributor priskyrimai, isskyrus paties studento paskyra.
+    $allContributors = @(
+        $assignments | Where-Object {
+            $_.RoleDefinitionName -eq $LocCfg.RoleToCheck -and
+            (-not $_.SignInName -or -not $studentEmail -or $_.SignInName -ine $studentEmail)
         }
-    }
+    )
 
-    # Ieškome konkrečiai dėstytojo pagal global.json InstructorEmail
-    $instructor = $null
-
-    foreach ($c in $allContributors) {
-        if ($c.SignInName -and ($c.SignInName -ieq $GlobCfg.InstructorEmail)) {
-            $instructor = $c
-            break
+    # Konkretus destytojas pagal global.json InstructorEmail.
+    $instructorAssignments = @(
+        $allContributors | Where-Object {
+            $_.SignInName -and $_.SignInName -ieq $GlobCfg.InstructorEmail
         }
-    }
+    )
 
-    if ($instructor) {
-        if ($instructor.DisplayName) {
-            $displayName = $instructor.DisplayName
+    $instructorAtSubscription = @(
+        $instructorAssignments | Where-Object { $_.Scope -eq $subscriptionScope }
+    ) | Select-Object -First 1
+
+    if ($instructorAtSubscription) {
+        if ($instructorAtSubscription.DisplayName) {
+            $displayName = $instructorAtSubscription.DisplayName
         }
-        elseif ($instructor.SignInName) {
-            $displayName = $instructor.SignInName
+        elseif ($instructorAtSubscription.SignInName) {
+            $displayName = $instructorAtSubscription.SignInName
         }
         else {
             $displayName = $LabMsg.InstructorFallbackName.$Lang
         }
 
-        $otherCount = $allContributors.Count - 1
+        $otherCount = @($allContributors | Where-Object {
+            -not ($_.SignInName -and $_.SignInName -ieq $GlobCfg.InstructorEmail)
+        }).Count
 
-        if ($otherCount -gt 0) {
-            $suffix = " " + ($LabMsg.OtherContributors.$Lang -f $otherCount)
-        }
-        else {
-            $suffix = ""
-        }
+        $suffix = if ($otherCount -gt 0) {
+            " " + ($LabMsg.OtherContributors.$Lang -f $otherCount)
+        } else { "" }
 
         $res2Text  = "[$($Msg.Ok)] - ${displayName}${suffix}"
         $res2Color = "Green"
     }
+    elseif ($instructorAssignments.Count -gt 0) {
+        # Dėstytojas rastas, bet Contributor suteiktas siauresneje apimtyje.
+        $firstInstructor = $instructorAssignments | Select-Object -First 1
+        $displayName = if ($firstInstructor.DisplayName) {
+            $firstInstructor.DisplayName
+        } elseif ($firstInstructor.SignInName) {
+            $firstInstructor.SignInName
+        } else {
+            $LabMsg.InstructorFallbackName.$Lang
+        }
+
+        $res2Text  = "[$($Msg.Warning)] - $displayName ($($LabMsg.InstructorWrongScope.$Lang): $($firstInstructor.Scope))"
+        $res2Color = "Yellow"
+    }
     elseif ($allContributors.Count -gt 0) {
-        $firstOther = $allContributors[0]
-
-        if ($firstOther.DisplayName) {
-            $otherName = $firstOther.DisplayName
-        }
-        elseif ($firstOther.SignInName) {
-            $otherName = $firstOther.SignInName
-        }
-        else {
-            $otherName = $LabMsg.OtherUserFallbackName.$Lang
+        # Contributor priskirtas, bet ne destytojui.
+        $firstOther = $allContributors | Select-Object -First 1
+        $otherName = if ($firstOther.DisplayName) {
+            $firstOther.DisplayName
+        } elseif ($firstOther.SignInName) {
+            $firstOther.SignInName
+        } else {
+            $LabMsg.OtherUserFallbackName.$Lang
         }
 
-        $res2Text  = "[$($Msg.Error)] - $otherName ($($LabMsg.InstructorNotFound.$Lang))"
+        $res2Text  = "[$($Msg.Warning)] - $otherName ($($LabMsg.InstructorNotFound.$Lang))"
         $res2Color = "Yellow"
     }
     else {
@@ -165,22 +172,22 @@ try {
     }
 }
 catch {
-    $res2Text  = "[$($Msg.Error)] - $($LabMsg.RoleCheckFailed.$Lang): $($_.Exception.Message)"
-    $res2Color = "Red"
+    # Technine patikros problema nera studento darbo klaida.
+    $res2Text  = "[$($Msg.Warning)] - $($LabMsg.RoleCheckFailed.$Lang): $($_.Exception.Message)"
+    $res2Color = "Yellow"
 }
 
 
 # ============================================================
 # D. BUDGET TIKRINIMAS
 # ============================================================
-
 try {
     $accountsResponse = Invoke-AzRestMethod `
         -Method GET `
         -Uri "https://management.azure.com/providers/Microsoft.Billing/billingAccounts?api-version=2024-04-01" `
         -ErrorAction Stop
 
-    $accounts = ($accountsResponse.Content | ConvertFrom-Json).value
+    $accounts = @((($accountsResponse.Content | ConvertFrom-Json).value))
     $foundBudgets = @()
 
     foreach ($account in $accounts) {
@@ -188,9 +195,9 @@ try {
 
         try {
             $budgetResponse = Invoke-AzRestMethod -Method GET -Uri $budgetUri -ErrorAction Stop
-            $budgets = ($budgetResponse.Content | ConvertFrom-Json).value
+            $budgets = @((($budgetResponse.Content | ConvertFrom-Json).value))
 
-            if ($budgets) {
+            if ($budgets.Count -gt 0) {
                 $foundBudgets += $budgets
             }
         }
@@ -201,7 +208,6 @@ try {
 
     if ($foundBudgets.Count -gt 0) {
         $budgetNames = $foundBudgets | ForEach-Object { $_.name }
-
         $res3Text  = "[$($Msg.Ok)] - " + ($budgetNames -join ", ")
         $res3Color = "Green"
     }
@@ -211,26 +217,23 @@ try {
     }
 }
 catch {
-    $res3Text  = "[$($Msg.Error)] - $($LabMsg.BudgetCheckFailed.$Lang): $($_.Exception.Message)"
-    $res3Color = "Red"
+    # Technine klaida -> Warning, nes nezinome, ar Budget tikrai neegzistuoja.
+    $res3Text  = "[$($Msg.Warning)] - $($LabMsg.BudgetCheckFailed.$Lang): $($_.Exception.Message)"
+    $res3Color = "Yellow"
 }
 
 
 # ============================================================
-# E. LEIDŽIAMŲ AZURE REGIONŲ NUSTATYMAS
+# E. LEIDZIAMU AZURE REGIONU NUSTATYMAS
 # ============================================================
-
 try {
-    $subscriptionId = (Get-AzContext).Subscription.Id
-
     $policyUri = "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Authorization/policyAssignments?api-version=2026-06-01&`$filter=atScope()"
 
     $policyResponse = Invoke-AzRestMethod -Method GET -Uri $policyUri -ErrorAction Stop
-    $assignments = ($policyResponse.Content | ConvertFrom-Json).value
-
+    $policyAssignments = @((($policyResponse.Content | ConvertFrom-Json).value))
     $allowedLocations = @()
 
-    foreach ($assignment in $assignments) {
+    foreach ($assignment in $policyAssignments) {
         if ($assignment.properties.displayName -eq "Allowed resource deployment regions") {
             $parameters = $assignment.properties.parameters
 
@@ -244,7 +247,7 @@ try {
         }
     }
 
-    $allowedLocations = $allowedLocations | Sort-Object -Unique
+    $allowedLocations = @($allowedLocations | Sort-Object -Unique)
 
     if ($allowedLocations.Count -gt 0) {
         $res4Text  = "[INFO] - " + ($allowedLocations -join ", ")
@@ -264,7 +267,6 @@ catch {
 # ============================================================
 # GALUTINIS REZULTATAS
 # ============================================================
-
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
 
 Write-Host ""
