@@ -20,126 +20,75 @@ catch {
 }
 
 # --- 3. INICIJUOJAME DARBA ---
-$Setup = Initialize-Lab `
-    -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/Check-Lab3-config.json" `
-    -Lang $Lang
+$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab03/Check-Lab3-config.json" -Lang $Lang
 
-$LocCfg  = $Setup.LocalConfig
-$Check   = $LocCfg.Checks
-$LabMsg  = $LocCfg.Messages
-$Msg     = $Setup.Messages
+$LocCfg = $Setup.LocalConfig
+$Check = $LocCfg.Checks
+$LabMsg = $LocCfg.Messages
+$Msg = $Setup.Messages
 $LabName = $LocCfg.LabName.$Lang
-
-$OkStatus      = $Msg.Ok
-$ErrorStatus   = $Msg.Error
-$WarningStatus = $Msg.Warning
+$results = @()
 
 # ============================================================
 # A. RESOURCE GROUP
 # ============================================================
 
 $targetRG = $null
-$rgText = $null
-$rgColor = "Red"
 
 try {
-    $matchingRGs = @(
-        Get-AzResourceGroup -ErrorAction Stop |
-        Where-Object { $_.ResourceGroupName -match $LocCfg.ResourceGroupPattern }
-    )
-
-    $targetRG = $matchingRGs | Select-Object -First 1
+    $allRGs = @(Get-AzResourceGroup -ErrorAction Stop)
+    $rgMatch = Find-PatternMatch -Items $allRGs -Property "ResourceGroupName" -Pattern $LocCfg.ResourceGroupPattern
+    $targetRG = $rgMatch.First
 
     if ($targetRG) {
-        if ($matchingRGs.Count -gt 1) {
-            $rgText  = "[$WarningStatus] - $($targetRG.ResourceGroupName) ($($targetRG.Location)); $($LabMsg.MultipleResourceGroups.$Lang)"
-            $rgColor = "Yellow"
-        }
-        else {
-            $rgText  = "[$OkStatus] - $($targetRG.ResourceGroupName) ($($targetRG.Location))"
-            $rgColor = "Green"
-        }
+        $status = if ($rgMatch.Count -gt 1) { "WARNING" } else { "OK" }
+        $message = "$($targetRG.ResourceGroupName) ($($targetRG.Location))"
+        if ($rgMatch.Count -gt 1) { $message += "; $($LabMsg.MultipleResourceGroups.$Lang)" }
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status $status -Message $message -Messages $Msg
     }
     else {
-        $rgText  = "[$ErrorStatus] - $($LabMsg.ResourceGroupNotFound.$Lang)"
-        $rgColor = "Red"
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status "ERROR" -Message $LabMsg.ResourceGroupNotFound.$Lang -Messages $Msg
     }
 }
 catch {
-    $rgText  = "[$WarningStatus] - $($LabMsg.ResourceGroupCheckFailed.$Lang)"
-    $rgColor = "Yellow"
+    Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status "WARNING" -Message $LabMsg.ResourceGroupCheckFailed.$Lang -Messages $Msg
 }
 
 # ============================================================
-# B. REZULTATU SARASAS
-# ============================================================
-
-$resourceResults = @()
-
-$resourceResults += [PSCustomObject]@{
-    Name  = $Check.ResourceGroup.$Lang
-    Text  = $rgText
-    Color = $rgColor
-}
-
-# ============================================================
-# C. VM IR DISKAI
+# B. VM IR DISKAI
 # ============================================================
 
 if ($targetRG) {
     $vm = $null
 
     try {
-        $vms = @(
-            Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction Stop
-        )
-
+        $vms = @(Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction Stop)
         $vm = $vms | Select-Object -First 1
 
         if ($vm) {
             $actualSize = $vm.HardwareProfile.VmSize
 
             try {
-                $statusObj = Get-AzVM `
-                    -ResourceGroupName $targetRG.ResourceGroupName `
-                    -Name $vm.Name `
-                    -Status `
-                    -ErrorAction Stop
-
-                $displayStatus = (
-                    $statusObj.Statuses |
-                    Where-Object Code -like "PowerState/*" |
-                    Select-Object -First 1
-                ).DisplayStatus
+                $statusObj = Get-AzVM -ResourceGroupName $targetRG.ResourceGroupName -Name $vm.Name -Status -ErrorAction Stop
+                $displayStatus = ($statusObj.Statuses | Where-Object Code -like "PowerState/*" | Select-Object -First 1).DisplayStatus
             }
             catch {
                 $displayStatus = $LabMsg.StatusNotDetected.$Lang
             }
 
-            if ($vms.Count -gt 1) {
-                $vmText  = "[$WarningStatus] - $($vm.Name) ($actualSize) [$displayStatus]; $($LabMsg.MultipleVirtualMachines.$Lang)"
-                $vmColor = "Yellow"
-            }
-            else {
-                $vmText  = "[$OkStatus] - $($vm.Name) ($actualSize) [$displayStatus]"
-                $vmColor = "Green"
-            }
+            $status = if ($vms.Count -gt 1) { "WARNING" } else { "OK" }
+            $message = "$($vm.Name) ($actualSize) [$displayStatus]"
+            if ($vms.Count -gt 1) { $message += "; $($LabMsg.MultipleVirtualMachines.$Lang)" }
+            Add-LabResult -Results ([ref]$results) -Name $Check.VirtualMachine.$Lang -Status $status -Message $message -Messages $Msg
 
             # OS diskas
             $osDiskName = $vm.StorageProfile.OsDisk.Name
-
             try {
-                $osDisk = Get-AzDisk `
-                    -ResourceGroupName $targetRG.ResourceGroupName `
-                    -DiskName $osDiskName `
-                    -ErrorAction Stop
-
-                $osDiskText  = "[$OkStatus] - $($osDisk.Sku.Name)"
-                $osDiskColor = "Green"
+                $osDisk = Get-AzDisk -ResourceGroupName $targetRG.ResourceGroupName -DiskName $osDiskName -ErrorAction Stop
+                Add-LabResult -Results ([ref]$results) -Name $Check.OsDisk.$Lang -Status "OK" -Message $osDisk.Sku.Name -Messages $Msg -Indent 1
             }
             catch {
-                $osDiskText  = "[$WarningStatus] - $($LabMsg.OsDiskCheckFailed.$Lang)"
-                $osDiskColor = "Yellow"
+                Add-LabResult -Results ([ref]$results) -Name $Check.OsDisk.$Lang -Status "WARNING" -Message $LabMsg.OsDiskCheckFailed.$Lang -Messages $Msg -Indent 1
             }
 
             # Duomenu diskai
@@ -153,11 +102,7 @@ if ($targetRG) {
                 foreach ($dataDisk in $dataDisks) {
                     if ($dataDisk.ManagedDisk.Id) {
                         try {
-                            $disk = Get-AzDisk `
-                                -ResourceGroupName $targetRG.ResourceGroupName `
-                                -DiskName $dataDisk.Name `
-                                -ErrorAction Stop
-
+                            $disk = Get-AzDisk -ResourceGroupName $targetRG.ResourceGroupName -DiskName $dataDisk.Name -ErrorAction Stop
                             $diskSizes += "$($disk.DiskSizeGB) GiB"
                         }
                         catch {
@@ -167,93 +112,46 @@ if ($targetRG) {
                 }
 
                 if ($diskReadFailed) {
-                    $diskText  = "[$WarningStatus] - $($LabMsg.DataDiskFound.$Lang): $diskCount; $($LabMsg.DataDiskDetailsCheckFailed.$Lang)"
-                    $diskColor = "Yellow"
+                    $message = "$($LabMsg.DataDiskFound.$Lang): $diskCount; $($LabMsg.DataDiskDetailsCheckFailed.$Lang)"
+                    Add-LabResult -Results ([ref]$results) -Name $Check.DataDisk.$Lang -Status "WARNING" -Message $message -Messages $Msg -Indent 1
                 }
                 elseif ($diskSizes.Count -gt 0) {
-                    $diskText  = "[$OkStatus] - $($LabMsg.DataDiskFound.$Lang): $diskCount ($($diskSizes -join ', '))"
-                    $diskColor = "Green"
+                    $message = "$($LabMsg.DataDiskFound.$Lang): $diskCount ($($diskSizes -join ', '))"
+                    Add-LabResult -Results ([ref]$results) -Name $Check.DataDisk.$Lang -Status "OK" -Message $message -Messages $Msg -Indent 1
                 }
                 else {
-                    $diskText  = "[$OkStatus] - $($LabMsg.DataDiskFound.$Lang): $diskCount"
-                    $diskColor = "Green"
+                    Add-LabResult -Results ([ref]$results) -Name $Check.DataDisk.$Lang -Status "OK" -Message "$($LabMsg.DataDiskFound.$Lang): $diskCount" -Messages $Msg -Indent 1
                 }
             }
             else {
-                $diskText  = "[$ErrorStatus] - $($LabMsg.DataDiskNotFound.$Lang)"
-                $diskColor = "Red"
+                Add-LabResult -Results ([ref]$results) -Name $Check.DataDisk.$Lang -Status "ERROR" -Message $LabMsg.DataDiskNotFound.$Lang -Messages $Msg -Indent 1
             }
         }
         else {
-            $vmText      = "[$ErrorStatus] - $($LabMsg.VirtualMachineNotFound.$Lang)"
-            $vmColor     = "Red"
-            $osDiskText  = "---"
-            $osDiskColor = "Gray"
-            $diskText    = "---"
-            $diskColor   = "Gray"
+            Add-LabResult -Results ([ref]$results) -Name $Check.VirtualMachine.$Lang -Status "ERROR" -Message $LabMsg.VirtualMachineNotFound.$Lang -Messages $Msg
         }
     }
     catch {
-        $vmText      = "[$WarningStatus] - $($LabMsg.VirtualMachineCheckFailed.$Lang)"
-        $vmColor     = "Yellow"
-        $osDiskText  = "---"
-        $osDiskColor = "Gray"
-        $diskText    = "---"
-        $diskColor   = "Gray"
-    }
-
-    $resourceResults += [PSCustomObject]@{
-        Name  = $Check.VirtualMachine.$Lang
-        Text  = $vmText
-        Color = $vmColor
-    }
-
-    if ($vm) {
-        $resourceResults += [PSCustomObject]@{
-            Name  = " - $($Check.OsDisk.$Lang)"
-            Text  = $osDiskText
-            Color = $osDiskColor
-        }
-
-        $resourceResults += [PSCustomObject]@{
-            Name  = " - $($Check.DataDisk.$Lang)"
-            Text  = $diskText
-            Color = $diskColor
-        }
+        Add-LabResult -Results ([ref]$results) -Name $Check.VirtualMachine.$Lang -Status "WARNING" -Message $LabMsg.VirtualMachineCheckFailed.$Lang -Messages $Msg
     }
 
     # ========================================================
-    # D. FUNCTION APP
+    # C. FUNCTION APP
     # ========================================================
-
-    $funcApp = $null
 
     try {
         $funcApps = @(
-            Get-AzResource `
-                -ResourceGroupName $targetRG.ResourceGroupName `
-                -ResourceType "Microsoft.Web/sites" `
-                -ErrorAction Stop |
+            Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType "Microsoft.Web/sites" -ErrorAction Stop |
             Where-Object { $_.Kind -like "*functionapp*" }
         )
 
         $funcApp = $funcApps | Select-Object -First 1
 
         if ($funcApp) {
-            if ($funcApps.Count -gt 1) {
-                $funcText  = "[$WarningStatus] - $($funcApp.Name); $($LabMsg.MultipleFunctionApps.$Lang)"
-                $funcColor = "Yellow"
-            }
-            else {
-                $funcText  = "[$OkStatus] - $($funcApp.Name)"
-                $funcColor = "Green"
-            }
-
-            $resourceResults += [PSCustomObject]@{
-                Name  = $Check.FunctionApp.$Lang
-                Text  = $funcText
-                Color = $funcColor
-            }
+            $status = if ($funcApps.Count -gt 1) { "WARNING" } else { "OK" }
+            $message = $funcApp.Name
+            if ($funcApps.Count -gt 1) { $message += "; $($LabMsg.MultipleFunctionApps.$Lang)" }
+            Add-LabResult -Results ([ref]$results) -Name $Check.FunctionApp.$Lang -Status $status -Message $message -Messages $Msg
 
             Write-Host "   ($($LabMsg.CheckingFunctions.$Lang))" -ForegroundColor DarkGray
 
@@ -261,15 +159,8 @@ if ($targetRG) {
             $cliOutput = @()
 
             try {
-                $jsonText = az functionapp function list `
-                    --resource-group $targetRG.ResourceGroupName `
-                    --name $funcApp.Name `
-                    --output json 2>$null
-
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Azure CLI returned exit code $LASTEXITCODE"
-                }
-
+                $jsonText = az functionapp function list --resource-group $targetRG.ResourceGroupName --name $funcApp.Name --output json 2>$null
+                if ($LASTEXITCODE -ne 0) { throw "Azure CLI returned exit code $LASTEXITCODE" }
                 $cliOutput = @($jsonText | ConvertFrom-Json)
             }
             catch {
@@ -277,114 +168,43 @@ if ($targetRG) {
             }
 
             if ($functionListOk) {
-                # HTTP funkcija - mokomojoje aplinkoje pakanka pavadinimo *-fun1
-                $fun1 = $cliOutput |
-                    Where-Object { $_.name -like "*/*-fun1" } |
-                    Select-Object -First 1
-
+                # Mokomojoje aplinkoje pakanka funkciju pavadinimu *-fun1 ir *-fun2.
+                $fun1 = $cliOutput | Where-Object { $_.name -like "*/*-fun1" } | Select-Object -First 1
                 if ($fun1) {
-                    $cleanName = $fun1.name.Split('/')[-1]
-                    $resourceResults += [PSCustomObject]@{
-                        Name  = $Check.HttpFunction.$Lang
-                        Text  = "[$OkStatus] - $cleanName"
-                        Color = "Green"
-                    }
+                    Add-LabResult -Results ([ref]$results) -Name $Check.HttpFunction.$Lang -Status "OK" -Message $fun1.name.Split('/')[-1] -Messages $Msg -Indent 1
                 }
                 else {
-                    $resourceResults += [PSCustomObject]@{
-                        Name  = $Check.HttpFunction.$Lang
-                        Text  = "[$ErrorStatus] - $($LabMsg.HttpFunctionNotFound.$Lang)"
-                        Color = "Red"
-                    }
+                    Add-LabResult -Results ([ref]$results) -Name $Check.HttpFunction.$Lang -Status "ERROR" -Message $LabMsg.HttpFunctionNotFound.$Lang -Messages $Msg -Indent 1
                 }
 
-                # Timer funkcija - mokomojoje aplinkoje pakanka pavadinimo *-fun2
-                $fun2 = $cliOutput |
-                    Where-Object { $_.name -like "*/*-fun2" } |
-                    Select-Object -First 1
-
+                $fun2 = $cliOutput | Where-Object { $_.name -like "*/*-fun2" } | Select-Object -First 1
                 if ($fun2) {
-                    $cleanName = $fun2.name.Split('/')[-1]
-                    $resourceResults += [PSCustomObject]@{
-                        Name  = $Check.TimerFunction.$Lang
-                        Text  = "[$OkStatus] - $cleanName"
-                        Color = "Green"
-                    }
+                    Add-LabResult -Results ([ref]$results) -Name $Check.TimerFunction.$Lang -Status "OK" -Message $fun2.name.Split('/')[-1] -Messages $Msg -Indent 1
                 }
                 else {
-                    $resourceResults += [PSCustomObject]@{
-                        Name  = $Check.TimerFunction.$Lang
-                        Text  = "[$ErrorStatus] - $($LabMsg.TimerFunctionNotFound.$Lang)"
-                        Color = "Red"
-                    }
+                    Add-LabResult -Results ([ref]$results) -Name $Check.TimerFunction.$Lang -Status "ERROR" -Message $LabMsg.TimerFunctionNotFound.$Lang -Messages $Msg -Indent 1
                 }
             }
             else {
-                $resourceResults += [PSCustomObject]@{
-                    Name  = $Check.HttpFunction.$Lang
-                    Text  = "[$WarningStatus] - $($LabMsg.FunctionListCheckFailed.$Lang)"
-                    Color = "Yellow"
-                }
-
-                $resourceResults += [PSCustomObject]@{
-                    Name  = $Check.TimerFunction.$Lang
-                    Text  = "[$WarningStatus] - $($LabMsg.FunctionListCheckFailed.$Lang)"
-                    Color = "Yellow"
-                }
+                Add-LabResult -Results ([ref]$results) -Name $Check.HttpFunction.$Lang -Status "WARNING" -Message $LabMsg.FunctionListCheckFailed.$Lang -Messages $Msg -Indent 1
+                Add-LabResult -Results ([ref]$results) -Name $Check.TimerFunction.$Lang -Status "WARNING" -Message $LabMsg.FunctionListCheckFailed.$Lang -Messages $Msg -Indent 1
             }
         }
         else {
-            $resourceResults += [PSCustomObject]@{
-                Name  = $Check.FunctionApp.$Lang
-                Text  = "[$ErrorStatus] - $($LabMsg.FunctionAppNotFound.$Lang)"
-                Color = "Red"
-            }
+            Add-LabResult -Results ([ref]$results) -Name $Check.FunctionApp.$Lang -Status "ERROR" -Message $LabMsg.FunctionAppNotFound.$Lang -Messages $Msg
         }
     }
     catch {
-        $resourceResults += [PSCustomObject]@{
-            Name  = $Check.FunctionApp.$Lang
-            Text  = "[$WarningStatus] - $($LabMsg.FunctionAppCheckFailed.$Lang)"
-            Color = "Yellow"
-        }
+        Add-LabResult -Results ([ref]$results) -Name $Check.FunctionApp.$Lang -Status "WARNING" -Message $LabMsg.FunctionAppCheckFailed.$Lang -Messages $Msg
     }
 }
 else {
-    $resourceResults += [PSCustomObject]@{
-        Name  = $Check.VirtualMachine.$Lang
-        Text  = "[$ErrorStatus] - $($LabMsg.NoResourceGroup.$Lang)"
-        Color = "Gray"
-    }
-
-    $resourceResults += [PSCustomObject]@{
-        Name  = $Check.FunctionApp.$Lang
-        Text  = "[$ErrorStatus] - $($LabMsg.NoResourceGroup.$Lang)"
-        Color = "Gray"
-    }
+    Add-LabResult -Results ([ref]$results) -Name $Check.VirtualMachine.$Lang -Status "ERROR" -Message $LabMsg.NoResourceGroup.$Lang -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $Check.FunctionApp.$Lang -Status "ERROR" -Message $LabMsg.NoResourceGroup.$Lang -Messages $Msg
 }
 
 # ============================================================
 # GALUTINIS REZULTATAS
 # ============================================================
 
-$date = Get-Date -Format "yyyy-MM-dd HH:mm"
-
-Write-Host ""
-Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host $Setup.HeaderTitle
-Write-Host $LabName -ForegroundColor Yellow
-Write-Host "$($Msg.Date): $date"
-Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
-Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
-Write-Host "==================================================" -ForegroundColor Gray
-
-# ============================================================
-# GALUTINIS REZULTATAS
-# ============================================================
-
-Show-LabResults `
-    -Setup $Setup `
-    -LabName $LabName `
-    -Results $results `
-    -LabelWidth 30
+Show-LabResults -Setup $Setup -LabName $LabName -Results $results -LabelWidth 30
