@@ -55,29 +55,14 @@ $results = @()
 # ============================================================
 try {
     if ($studentEmail -match '(?i)@itm\.kaunokolegija\.lt$') {
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtAccount `
-            -Status "OK" `
-            -Message $studentEmail `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtAccount -Status "OK" -Message $studentEmail -Messages $Msg
     }
     else {
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtAccount `
-            -Status "ERROR" `
-            -Message "$($LabMsg.InvalidAccount.$Lang): $studentEmail" `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtAccount -Status "ERROR" -Message "$($LabMsg.InvalidAccount.$Lang): $studentEmail" -Messages $Msg
     }
 }
 catch {
-    Add-LabResult `
-        -Results ([ref]$results) `
-        -Name $TxtAccount `
-        -Status "WARNING" `
-        -Message $LabMsg.AccountCheckFailed.$Lang `
-        -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $TxtAccount -Status "WARNING" -Message $LabMsg.AccountCheckFailed.$Lang -Messages $Msg
 }
 
 # ============================================================
@@ -91,29 +76,14 @@ try {
     $isEnFormat = $subName -match $LocCfg.NamingPatterns.EN
 
     if ($isLtFormat -or $isEnFormat) {
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtSubscriptionName `
-            -Status "OK" `
-            -Message $subName `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtSubscriptionName -Status "OK" -Message $subName -Messages $Msg
     }
     else {
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtSubscriptionName `
-            -Status "ERROR" `
-            -Message "$subName ($($LabMsg.InvalidSubscriptionFormat.$Lang))" `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtSubscriptionName -Status "ERROR" -Message "$subName ($($LabMsg.InvalidSubscriptionFormat.$Lang))" -Messages $Msg
     }
 }
 catch {
-    Add-LabResult `
-        -Results ([ref]$results) `
-        -Name $TxtSubscriptionName `
-        -Status "WARNING" `
-        -Message $LabMsg.SubscriptionCheckFailed.$Lang `
-        -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $TxtSubscriptionName -Status "WARNING" -Message $LabMsg.SubscriptionCheckFailed.$Lang -Messages $Msg
 }
 
 # ============================================================
@@ -166,12 +136,7 @@ try {
             ""
         }
 
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtInstructorAccess `
-            -Status "OK" `
-            -Message "${displayName}${suffix}" `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtInstructorAccess -Status "OK" -Message "${displayName}${suffix}" -Messages $Msg
     }
     elseif ($instructorAssignments.Count -gt 0) {
         $firstInstructor = $instructorAssignments | Select-Object -First 1
@@ -186,12 +151,7 @@ try {
             $LabMsg.InstructorFallbackName.$Lang
         }
 
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtInstructorAccess `
-            -Status "WARNING" `
-            -Message "$displayName ($($LabMsg.InstructorWrongScope.$Lang): $($firstInstructor.Scope))" `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtInstructorAccess -Status "WARNING" -Message "$displayName ($($LabMsg.InstructorWrongScope.$Lang): $($firstInstructor.Scope))" -Messages $Msg
     }
     elseif ($allContributors.Count -gt 0) {
         $firstOther = $allContributors | Select-Object -First 1
@@ -206,29 +166,14 @@ try {
             $LabMsg.OtherUserFallbackName.$Lang
         }
 
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtInstructorAccess `
-            -Status "WARNING" `
-            -Message "$otherName ($($LabMsg.InstructorNotFound.$Lang))" `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtInstructorAccess -Status "WARNING" -Message "$otherName ($($LabMsg.InstructorNotFound.$Lang))" -Messages $Msg
     }
     else {
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtInstructorAccess `
-            -Status "ERROR" `
-            -Message $LabMsg.NoContributorFound.$Lang `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtInstructorAccess -Status "ERROR" -Message $LabMsg.NoContributorFound.$Lang -Messages $Msg
     }
 }
 catch {
-    Add-LabResult `
-        -Results ([ref]$results) `
-        -Name $TxtInstructorAccess `
-        -Status "WARNING" `
-        -Message "$($LabMsg.RoleCheckFailed.$Lang): $($_.Exception.Message)" `
-        -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $TxtInstructorAccess -Status "WARNING" -Message "$($LabMsg.RoleCheckFailed.$Lang): $($_.Exception.Message)" -Messages $Msg
 }
 
 # ============================================================
@@ -266,29 +211,14 @@ try {
     if ($foundBudgets.Count -gt 0) {
         $budgetNames = $foundBudgets | ForEach-Object { $_.name }
 
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtBudget `
-            -Status "OK" `
-            -Message ($budgetNames -join ", ") `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtBudget -Status "OK" -Message ($budgetNames -join ", ") -Messages $Msg
     }
     else {
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtBudget `
-            -Status "ERROR" `
-            -Message $LabMsg.BudgetNotFound.$Lang `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtBudget -Status "ERROR" -Message $LabMsg.BudgetNotFound.$Lang -Messages $Msg
     }
 }
 catch {
-    Add-LabResult `
-        -Results ([ref]$results) `
-        -Name $TxtBudget `
-        -Status "WARNING" `
-        -Message "$($LabMsg.BudgetCheckFailed.$Lang): $($_.Exception.Message)" `
-        -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $TxtBudget -Status "WARNING" -Message "$($LabMsg.BudgetCheckFailed.$Lang): $($_.Exception.Message)" -Messages $Msg
 }
 
 # ============================================================
@@ -322,35 +252,17 @@ try {
     $allowedLocations = @($allowedLocations | Sort-Object -Unique)
 
     if ($allowedLocations.Count -gt 0) {
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtAllowedLocations `
-            -Status "INFO" `
-            -Message ($allowedLocations -join ", ") `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtAllowedLocations -Status "INFO" -Message ($allowedLocations -join ", ") -Messages $Msg
     }
     else {
-        Add-LabResult `
-            -Results ([ref]$results) `
-            -Name $TxtAllowedLocations `
-            -Status "INFO" `
-            -Message $LabMsg.AllowedLocationsNotFound.$Lang `
-            -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $TxtAllowedLocations -Status "INFO" -Message $LabMsg.AllowedLocationsNotFound.$Lang -Messages $Msg
     }
 }
 catch {
-    Add-LabResult `
-        -Results ([ref]$results) `
-        -Name $TxtAllowedLocations `
-        -Status "INFO" `
-        -Message "$($LabMsg.AllowedLocationsCheckFailed.$Lang): $($_.Exception.Message)" `
-        -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $TxtAllowedLocations -Status "INFO" -Message "$($LabMsg.AllowedLocationsCheckFailed.$Lang): $($_.Exception.Message)" -Messages $Msg
 }
 
 # ============================================================
 # GALUTINIS REZULTATAS
 # ============================================================
-Show-LabResults `
-    -Setup $Setup `
-    -LabName $LabName `
-    -Results $results
+Show-LabResults -Setup $Setup -LabName $LabName -Results $results
