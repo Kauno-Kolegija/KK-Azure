@@ -268,6 +268,43 @@ catch {
 # GALUTINIS REZULTATAS
 # ============================================================
 
+$results = @(
+    [PSCustomObject]@{
+        Name   = $TxtAccount
+        Text   = $res0Text
+        Color  = $res0Color
+        Indent = 0
+    }
+
+    [PSCustomObject]@{
+        Name   = $TxtSubscriptionName
+        Text   = $res1Text
+        Color  = $res1Color
+        Indent = 0
+    }
+
+    [PSCustomObject]@{
+        Name   = $TxtInstructorAccess
+        Text   = $res2Text
+        Color  = $res2Color
+        Indent = 0
+    }
+
+    [PSCustomObject]@{
+        Name   = $TxtBudget
+        Text   = $res3Text
+        Color  = $res3Color
+        Indent = 0
+    }
+
+    [PSCustomObject]@{
+        Name   = $TxtAllowedLocations
+        Text   = $res4Text
+        Color  = $res4Color
+        Indent = 0
+    }
+)
+
 Show-LabResults `
     -Setup $Setup `
     -LabName $LabName `
