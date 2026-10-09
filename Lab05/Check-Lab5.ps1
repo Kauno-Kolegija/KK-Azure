@@ -31,7 +31,7 @@ $LabName = $LocCfg.LabName.$Lang
 $OkStatus      = $Msg.Ok
 $ErrorStatus   = $Msg.Error
 $MissingStatus = $LabMsg.Missing.$Lang
-$WarningStatus = $LabMsg.Warning.$Lang
+$WarningStatus = if ($Msg.Warning) { $Msg.Warning } else { $LabMsg.Warning.$Lang }
 
 $results = @()
 
@@ -66,6 +66,7 @@ function Test-PortRule {
     return (
         $Rule.Protocol -ieq $Protocol -and
         $Rule.Access -ieq $Access -and
+        $Rule.Direction -ieq "Inbound" -and
         $ports -contains $Port
     )
 }
@@ -213,9 +214,37 @@ if ($targetRG) {
             Where-Object Name -EQ $LocCfg.NSG.WebRule.Name |
             Select-Object -First 1
 
+        $webRuleExactName = [bool]$webRule
+
+        if (-not $webRule) {
+            $webRule = $nsg.SecurityRules |
+                Where-Object {
+                    Test-PortRule `
+                        $_ `
+                        $LocCfg.NSG.WebRule.Protocol `
+                        $LocCfg.NSG.WebRule.DestinationPort `
+                        $LocCfg.NSG.WebRule.Access
+                } |
+                Select-Object -First 1
+        }
+
         $rdpRule = $nsg.SecurityRules |
             Where-Object Name -EQ $LocCfg.NSG.RdpRule.Name |
             Select-Object -First 1
+
+        $rdpRuleExactName = [bool]$rdpRule
+
+        if (-not $rdpRule) {
+            $rdpRule = $nsg.SecurityRules |
+                Where-Object {
+                    Test-PortRule `
+                        $_ `
+                        $LocCfg.NSG.RdpRule.Protocol `
+                        $LocCfg.NSG.RdpRule.DestinationPort `
+                        $LocCfg.NSG.RdpRule.Access
+                } |
+                Select-Object -First 1
+        }
 
         $webRuleOk = Test-PortRule `
             $webRule `
@@ -264,6 +293,11 @@ if ($targetRG) {
                 "[$ErrorStatus] - $($LabMsg.DuplicatePriority.$Lang)" `
                 "Red"
         }
+        elseif (-not $webRuleExactName -or -not $rdpRuleExactName) {
+            Add-Result $Check.NSG.$Lang `
+                "[$WarningStatus] - $nsgInfo; $($LabMsg.RuleNameWarning.$Lang)" `
+                "Yellow"
+        }
         else {
             Add-Result $Check.NSG.$Lang "[$OkStatus] - $nsgInfo" "Green"
         }
@@ -303,8 +337,8 @@ if ($targetRG) {
             Add-Result $Check.AvailabilitySet.$Lang "[$OkStatus] - $avInfo" "Green"
         } else {
             Add-Result $Check.AvailabilitySet.$Lang `
-                "[$ErrorStatus] - $($LabMsg.WrongAvailabilitySet.$Lang); $avInfo" `
-                "Red"
+                "[$WarningStatus] - $($LabMsg.WrongAvailabilitySet.$Lang); $avInfo" `
+                "Yellow"
         }
 
     } else {
@@ -359,9 +393,8 @@ if ($targetRG) {
             $ipConfig = $nic.IpConfigurations[0]
             $privateIp = $ipConfig.PrivateIpAddress
 
-            if ($ipConfig.Subnet.Id) {
-                $subnetName = ($ipConfig.Subnet.Id -split '/')[-1]
-                $subnetOk = $subnetName -eq $LocCfg.Network.Subnet.Name
+            if ($ipConfig.Subnet.Id -and $webSubnet -and $webSubnet.Id) {
+                $subnetOk = $ipConfig.Subnet.Id -eq $webSubnet.Id
             }
         }
 
@@ -414,8 +447,8 @@ if ($targetRG) {
                 "Green"
         } else {
             Add-Result $Check.LoadBalancer.$Lang `
-                "[$ErrorStatus] - $($LabMsg.WrongLoadBalancer.$Lang); SKU $($lb.Sku.Name)" `
-                "Red"
+                "[$WarningStatus] - $($LabMsg.WrongLoadBalancer.$Lang); SKU $($lb.Sku.Name)" `
+                "Yellow"
         }
 
         # ====================================================
@@ -569,31 +602,6 @@ if ($targetRG) {
         (Test-TagValue $vnetResource.Tags "Environment" $LocCfg.Tags.VNet.Environment)
     )
 
-    $vm1TagsOk = (
-        $vm1 -and
-        (Test-TagValue $vm1.Tags "Environment" $LocCfg.Tags.VirtualMachines.Environment) -and
-        (Test-TagValue $vm1.Tags "CreatedBy" "") -and
-        (Test-TagValue $vm1.Tags "NLB" "")
-    )
-
-    $vm2TagsOk = (
-        $vm2 -and
-        (Test-TagValue $vm2.Tags "Environment" $LocCfg.Tags.VirtualMachines.Environment) -and
-        (Test-TagValue $vm2.Tags "CreatedBy" "") -and
-        (Test-TagValue $vm2.Tags "NLB" "")
-    )
-
-    $vnetResource = if ($vnet) {
-        Get-AzResource -ResourceId $vnet.Id -ErrorAction SilentlyContinue
-    } else {
-        $null
-    }
-
-    $vnetTagsOk = (
-        $vnetResource -and
-        (Test-TagValue $vnetResource.Tags "Lab" $LocCfg.Tags.VNet.Lab) -and
-        (Test-TagValue $vnetResource.Tags "Environment" $LocCfg.Tags.VNet.Environment)
-    )
 
     if ($vm1TagsOk -and $vm2TagsOk -and $vnetTagsOk) {
         Add-Result $Check.Tags.$Lang `
@@ -601,8 +609,8 @@ if ($targetRG) {
             "Green"
     } else {
         Add-Result $Check.Tags.$Lang `
-            "[$ErrorStatus] - $($LabMsg.TagsMissing.$Lang)" `
-            "Red"
+            "[$WarningStatus] - $($LabMsg.TagsMissing.$Lang)" `
+            "Yellow"
     }
 }
 
@@ -610,33 +618,8 @@ if ($targetRG) {
 # GALUTINIS REZULTATAS
 # ============================================================
 
-$date = Get-Date -Format "yyyy-MM-dd HH:mm"
-
-Write-Host ""
-Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host $Setup.HeaderTitle
-Write-Host $LabName -ForegroundColor Yellow
-Write-Host "$($Msg.Date): $date"
-Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
-Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
-Write-Host "==================================================" -ForegroundColor Gray
-
-$i = 1
-
-foreach ($res in $results) {
-
-    $label = "$i. $($res.Name):"
-    $targetWidth = 34
-
-    $spaces = $targetWidth - $label.Length
-    if ($spaces -lt 1) { $spaces = 1 }
-
-    Write-Host "$label$(" " * $spaces)" -NoNewline
-    Write-Host $res.Text -ForegroundColor $res.Color
-
-    $i++
-}
-
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host ""
+Show-LabResults `
+    -Setup $Setup `
+    -LabName $LabName `
+    -Results $results `
+    -LabelWidth 34

@@ -19,6 +19,9 @@ function Get-ScriptVersion {
     }
 }
 
+# ============================================================
+# Initialize lab environment
+# ============================================================
 function Initialize-Lab {
     param (
         [string]$LocalConfigUrl,
@@ -80,4 +83,60 @@ function Initialize-Lab {
         Messages      = $Msg
         ScriptVersion = $ScriptVersion
     }
+}
+# ============================================================
+# Final result renderer
+# ============================================================
+function Show-LabResults {
+    param (
+        [Parameter(Mandatory)]
+        [object]$Setup,
+
+        [Parameter(Mandatory)]
+        [string]$LabName,
+
+        [Parameter(Mandatory)]
+        [array]$Results,
+
+        [int]$LabelWidth = 35
+    )
+
+    $Msg = $Setup.Messages
+    $date = Get-Date -Format "yyyy-MM-dd HH:mm"
+
+    Write-Host ""
+    Write-Host "--- $($Msg.FinalResult) ---" -ForegroundColor Cyan
+    Write-Host "==================================================" -ForegroundColor Gray
+    Write-Host $Setup.HeaderTitle
+    Write-Host $LabName -ForegroundColor Yellow
+    Write-Host "$($Msg.Date): $date"
+    Write-Host "$($Msg.Student): $($Setup.StudentEmail)"
+    Write-Host "$($Msg.ScriptVersion): $($Setup.ScriptVersion)"
+    Write-Host "==================================================" -ForegroundColor Gray
+
+    $i = 1
+
+    foreach ($res in $Results) {
+        $indent = 0
+        if ($null -ne $res.PSObject.Properties['Indent']) {
+            $indent = [int]$res.Indent
+        }
+
+        if ($indent -gt 0) {
+            $label = (("   " * $indent) + "$($res.Name):")
+        }
+        else {
+            $label = "$i. $($res.Name):"
+            $i++
+        }
+
+        $neededSpaces = $LabelWidth - $label.Length
+        if ($neededSpaces -lt 1) { $neededSpaces = 1 }
+
+        Write-Host ($label + (" " * $neededSpaces)) -NoNewline
+        Write-Host $res.Text -ForegroundColor $res.Color
+    }
+
+    Write-Host "==================================================" -ForegroundColor Gray
+    Write-Host ""
 }

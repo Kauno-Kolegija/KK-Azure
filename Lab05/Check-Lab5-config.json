@@ -3,7 +3,6 @@
     "LT": "LAB 5: Tinklo paslaugos (CLI)",
     "EN": "LAB 5: Network Services (CLI)"
   },
-
   "Checks": {
     "ResourceGroup": {
       "LT": "Resursų grupė",
@@ -46,7 +45,6 @@
       "EN": "Resource Tags"
     }
   },
-
   "Messages": {
     "Missing": {
       "LT": "TRŪKSTA",
@@ -111,13 +109,15 @@
     "TagsMissing": {
       "LT": "Trūksta privalomų žymių",
       "EN": "Required tags are missing"
+    },
+    "RuleNameWarning": {
+      "LT": "Taisyklė rasta pagal parametrus, bet pavadinimas skiriasi",
+      "EN": "The rule was found by its settings, but the name is different"
     }
   },
-
   "ResourceGroup": {
     "Pattern": "^RG-LAB05-.+$"
   },
-
   "Network": {
     "VNetPattern": "^.+-VNet$",
     "AddressSpace": "10.15.0.0/16",
@@ -126,63 +126,51 @@
       "Prefix": "10.15.0.0/24"
     }
   },
-
   "NSG": {
     "NamePattern": "^.+-NSG$",
-
     "WebRule": {
       "Name": "Allow_WEB",
       "Protocol": "Tcp",
       "DestinationPort": "80",
       "Access": "Allow"
     },
-
     "RdpRule": {
       "Name": "Allow_RDP",
       "Protocol": "Tcp",
       "DestinationPort": "3389",
       "Access": "Allow"
     },
-
     "Priority": {
       "Minimum": 100,
       "Maximum": 4096,
       "MustBeUnique": true
     }
   },
-
   "AvailabilitySet": {
     "NamePattern": "^.+-AvailabilitySet$",
     "FaultDomains": 2,
     "UpdateDomains": 2
   },
-
   "VirtualMachines": {
     "VM1Pattern": "^.+-VM-001$",
     "VM2Pattern": "^.+-VM-002$"
   },
-
   "LoadBalancer": {
     "NamePattern": "^.+-NLB$",
     "Sku": "Standard",
-
     "PublicIPPattern": "^.+-NLB-PublicIP$",
-
     "Frontend": {
       "Name": "NLBFrontEnd"
     },
-
     "BackendPool": {
       "Name": "WEBServerPool",
       "RequiredMembers": 2
     },
-
     "Probe": {
       "Name": "WebHealthProbe",
       "Protocol": "Tcp",
       "Port": 80
     },
-
     "Rule": {
       "Name": "myHTTPRule",
       "Protocol": "Tcp",
@@ -193,14 +181,12 @@
       "ProbeName": "WebHealthProbe"
     }
   },
-
   "Tags": {
     "VirtualMachines": {
       "Environment": "Production",
       "CreatedByRequired": true,
       "NLBRequired": true
     },
-
     "VNet": {
       "Lab": "Networking",
       "Environment": "Production"
