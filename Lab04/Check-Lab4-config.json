@@ -3,7 +3,6 @@
     "LT": "LAB 4: Tinklo paslaugos (GUI)",
     "EN": "LAB 4: Network Services (GUI)"
   },
-
   "Checks": {
     "ResourceGroups": {
       "LT": "Resursų grupės",
@@ -42,7 +41,6 @@
       "EN": "VM NSG"
     }
   },
-
   "Messages": {
     "Missing": {
       "LT": "TRŪKSTA",
@@ -115,9 +113,20 @@
     "WrongDenyRule": {
       "LT": "Netinkama Deny-SQL-LocalServer taisyklė",
       "EN": "Incorrect Deny-SQL-LocalServer rule"
+    },
+    "RgNamesWarning": {
+      "LT": "rastos LAB04 resursų grupės, bet dalies pavadinimai neatitinka šablono",
+      "EN": "LAB04 Resource Groups were found, but some names do not match the expected pattern"
+    },
+    "VmRgWarning": {
+      "LT": "VM yra tinkamame potinklyje, bet RG pavadinimas neatitinka šablono",
+      "EN": "VM is in the correct subnet, but the Resource Group name does not match the expected pattern"
+    },
+    "RuleNameWarning": {
+      "LT": "taisyklė rasta pagal parametrus, bet pavadinimas skiriasi",
+      "EN": "the rule was found by its settings, but the name is different"
     }
   },
-
   "ResourceGroups": {
     "Infrastructure": {
       "LT": "^RG-LAB04-.+-Infrastruktura$",
@@ -132,7 +141,6 @@
       "EN": "^RG-LAB04-.+-Warehouse$"
     }
   },
-
   "Networks": {
     "Admin": {
       "Name": "VNet-Admin",
@@ -148,7 +156,6 @@
         }
       }
     },
-
     "Warehouse": {
       "Names": {
         "LT": "VNet-Sandelis",
@@ -166,7 +173,6 @@
       }
     }
   },
-
   "VirtualMachines": {
     "Admin": "VM-Admin",
     "Warehouse": {
@@ -174,9 +180,7 @@
       "EN": "VM-Warehouse"
     }
   },
-
   "ApplicationSecurityGroup": "ASG-DB-Servers",
-
   "SubnetNSG": {
     "Names": {
       "LT": "NSG-Sandelis-Subnet",
@@ -194,7 +198,6 @@
       "Priority": 510
     }
   },
-
   "VmNSG": {
     "Rule": {
       "Name": {

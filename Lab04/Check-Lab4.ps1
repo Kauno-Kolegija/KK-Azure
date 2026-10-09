@@ -33,7 +33,7 @@ $LabName = $LocCfg.LabName.$Lang
 $OkStatus      = $Msg.Ok
 $ErrorStatus   = $Msg.Error
 $MissingStatus = $LabMsg.Missing.$Lang
-$WarningStatus = $LabMsg.Warning.$Lang
+$WarningStatus = if ($Msg.Warning) { $Msg.Warning } else { $LabMsg.Warning.$Lang }
 
 $resourceResults = @()
 
@@ -146,9 +146,14 @@ $rgWarehouse = $allRGs |
     Select-Object -First 1
 
 $foundRGs = @($rgInfra, $rgAdmin, $rgWarehouse | Where-Object { $_ }).Count
+$lab04RGs = @($allRGs | Where-Object { $_.ResourceGroupName -match '^RG-LAB04-' })
 
 if ($rgInfra -and $rgAdmin -and $rgWarehouse) {
     Add-Result $Check.ResourceGroups.$Lang "[$OkStatus] - 3/3" "Green"
+}
+elseif ($lab04RGs.Count -ge 3) {
+    $text = $LabMsg.FoundGroups.$Lang -f $foundRGs
+    Add-Result $Check.ResourceGroups.$Lang "[$WarningStatus] - $text; $($LabMsg.RgNamesWarning.$Lang)" "Yellow"
 }
 else {
     $text = $LabMsg.FoundGroups.$Lang -f $foundRGs
@@ -274,6 +279,9 @@ if ($vmAdmin -and $nicAdmin) {
     if ($correctRG -and $correctSubnet) {
         Add-Result $Check.VmAdmin.$Lang "[$OkStatus] - $adminIp" "Green"
     }
+    elseif ($correctSubnet -and $vmAdmin.ResourceGroupName -match '^RG-LAB04-') {
+        Add-Result $Check.VmAdmin.$Lang "[$WarningStatus] - $($LabMsg.VmRgWarning.$Lang) ($adminIp)" "Yellow"
+    }
     else {
         Add-Result $Check.VmAdmin.$Lang "[$ErrorStatus] - $($LabMsg.WrongRgOrSubnet.$Lang) ($adminIp)" "Red"
     }
@@ -304,6 +312,9 @@ if ($vmWarehouse -and $nicWarehouse) {
 
     if ($correctRG -and $correctSubnet) {
         Add-Result $Check.VmWarehouse.$Lang "[$OkStatus] - $warehouseIp" "Green"
+    }
+    elseif ($correctSubnet -and $vmWarehouse.ResourceGroupName -match '^RG-LAB04-') {
+        Add-Result $Check.VmWarehouse.$Lang "[$WarningStatus] - $($LabMsg.VmRgWarning.$Lang) ($warehouseIp)" "Yellow"
     }
     else {
         Add-Result $Check.VmWarehouse.$Lang "[$ErrorStatus] - $($LabMsg.WrongRgOrSubnet.$Lang) ($warehouseIp)" "Red"
@@ -395,6 +406,19 @@ else {
         Where-Object Name -EQ $LocCfg.SubnetNSG.SqlRule.Name |
         Select-Object -First 1
 
+    $sqlRuleExactName = [bool]$sqlRule
+
+    if (-not $sqlRule) {
+        $sqlRule = $subnetNsg.SecurityRules |
+            Where-Object {
+                $_.Access -eq $LocCfg.SubnetNSG.SqlRule.Access -and
+                $_.Priority -eq $LocCfg.SubnetNSG.SqlRule.Priority -and
+                $_.Direction -eq "Inbound" -and
+                (Test-PortRule $_ $LocCfg.SubnetNSG.SqlRule.Port)
+            } |
+            Select-Object -First 1
+    }
+
     $sqlPortOk = Test-PortRule $sqlRule $LocCfg.SubnetNSG.SqlRule.Port
 
     $sqlAsgOk = $false
@@ -407,12 +431,26 @@ else {
         $sqlRule -and
         $sqlRule.Access -eq $LocCfg.SubnetNSG.SqlRule.Access -and
         $sqlRule.Priority -eq $LocCfg.SubnetNSG.SqlRule.Priority -and
+        $sqlRule.Direction -eq "Inbound" -and
         $sqlPortOk -and
         $sqlAsgOk
 
     $pingRule = $subnetNsg.SecurityRules |
         Where-Object Name -EQ $LocCfg.SubnetNSG.PingRule.Name |
         Select-Object -First 1
+
+    $pingRuleExactName = [bool]$pingRule
+
+    if (-not $pingRule) {
+        $pingRule = $subnetNsg.SecurityRules |
+            Where-Object {
+                $_.Access -eq $LocCfg.SubnetNSG.PingRule.Access -and
+                $_.Priority -eq $LocCfg.SubnetNSG.PingRule.Priority -and
+                $_.Direction -eq "Inbound" -and
+                $_.Protocol -in @("Icmp", "IcmpV4", "ICMP", "ICMPv4")
+            } |
+            Select-Object -First 1
+    }
 
     $pingProtocolOk = $false
     if ($pingRule) {
@@ -429,11 +467,18 @@ else {
         $pingRule -and
         $pingRule.Access -eq $LocCfg.SubnetNSG.PingRule.Access -and
         $pingRule.Priority -eq $LocCfg.SubnetNSG.PingRule.Priority -and
+        $pingRule.Direction -eq "Inbound" -and
         $pingProtocolOk -and
         $pingAsgOk
 
     if ($sqlOk -and $pingOk) {
-        Add-Result $Check.SubnetNsg.$Lang "[$OkStatus] - Allow-SQL, Allow-Ping" "Green"
+        if ($sqlRuleExactName -and $pingRuleExactName) {
+            Add-Result $Check.SubnetNsg.$Lang "[$OkStatus] - Allow-SQL, Allow-Ping" "Green"
+        }
+        else {
+            $actualNames = @($sqlRule.Name, $pingRule.Name) -join ", "
+            Add-Result $Check.SubnetNsg.$Lang "[$WarningStatus] - $actualNames; $($LabMsg.RuleNameWarning.$Lang)" "Yellow"
+        }
     }
     else {
         $problems = @()
@@ -444,7 +489,6 @@ else {
         Add-Result $Check.SubnetNsg.$Lang "[$ErrorStatus] - $($LabMsg.CheckRules.$Lang): $($problems -join ', ')" "Red"
     }
 }
-
 # ============================================================
 # H. VM NIC NSG
 # ============================================================
@@ -464,16 +508,35 @@ if ($nicWarehouse -and $nicWarehouse.NetworkSecurityGroup) {
         Where-Object { $denyRuleNames -contains $_.Name } |
         Select-Object -First 1
 
+    $denyRuleExactName = [bool]$denyRule
+
+    if (-not $denyRule) {
+        $denyRule = $vmNsg.SecurityRules |
+            Where-Object {
+                $_.Access -eq $LocCfg.VmNSG.Rule.Access -and
+                $_.Priority -eq $LocCfg.VmNSG.Rule.Priority -and
+                $_.Direction -eq "Inbound" -and
+                (Test-PortRule $_ $LocCfg.VmNSG.Rule.Port)
+            } |
+            Select-Object -First 1
+    }
+
     $denyPortOk = Test-PortRule $denyRule $LocCfg.VmNSG.Rule.Port
 
     $denyOk =
         $denyRule -and
         $denyRule.Access -eq $LocCfg.VmNSG.Rule.Access -and
         $denyRule.Priority -eq $LocCfg.VmNSG.Rule.Priority -and
+        $denyRule.Direction -eq "Inbound" -and
         $denyPortOk
 
     if ($denyOk) {
-        Add-Result $Check.VmNsg.$Lang "[$OkStatus] - $($denyRule.Name) (1433, Priority 400)" "Green"
+        if ($denyRuleExactName) {
+            Add-Result $Check.VmNsg.$Lang "[$OkStatus] - $($denyRule.Name) (1433, Priority 400)" "Green"
+        }
+        else {
+            Add-Result $Check.VmNsg.$Lang "[$WarningStatus] - $($denyRule.Name) (1433, Priority 400); $($LabMsg.RuleNameWarning.$Lang)" "Yellow"
+        }
     }
     else {
         Add-Result $Check.VmNsg.$Lang "[$ErrorStatus] - $($LabMsg.WrongDenyRule.$Lang)" "Red"
