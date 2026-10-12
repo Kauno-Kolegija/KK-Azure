@@ -1,66 +1,73 @@
 {
   "LabName": {
-    "LT": "LAB 7: Azure duomenų bazės (SQL & NoSQL)",
+    "LT": "LAB 7: Azure Duomenų bazės (SQL & NoSQL)",
     "EN": "LAB 7: Azure Databases (SQL & NoSQL)"
   },
-
   "Checks": {
     "ResourceGroup": { "LT": "Resursų grupė", "EN": "Resource Group" },
     "SqlServers": { "LT": "SQL serveriai", "EN": "SQL servers" },
     "SqlDatabase": { "LT": "SQL duomenų bazė", "EN": "SQL database" },
     "GeoReplication": { "LT": "Geo-Replikacija", "EN": "Geo-Replication" },
-    "DataMasking": { "LT": "Dynamic Data Masking", "EN": "Dynamic Data Masking" },
-    "CosmosAccount": { "LT": "Cosmos DB paskyra", "EN": "Cosmos DB account" },
-    "CosmosDatabase": { "LT": "Cosmos DB duomenų bazė", "EN": "Cosmos DB database" },
-    "CosmosContainer": { "LT": "Cosmos DB konteineris", "EN": "Cosmos DB container" },
-    "CosmosTtl": { "LT": "Cosmos DB TTL", "EN": "Cosmos DB TTL" }
+    "DataMasking": { "LT": "Data Masking", "EN": "Data Masking" },
+    "CosmosAccount": { "LT": "Cosmos DB (NoSQL)", "EN": "Cosmos DB (NoSQL)" },
+    "CosmosDatabase": { "LT": "Cosmos duomenų bazė", "EN": "Cosmos database" },
+    "CosmosContainer": { "LT": "Cosmos konteineris", "EN": "Cosmos container" },
+    "PartitionKey": { "LT": "Partition Key", "EN": "Partition Key" },
+    "Ttl": { "LT": "TTL", "EN": "TTL" }
   },
-
   "Messages": {
-    "MultipleResourceGroups": { "LT": "Rastos kelios LAB07 resursų grupės", "EN": "Multiple LAB07 resource groups found" },
-    "ResourceGroupMissing": { "LT": "Nerasta LAB07 resursų grupė", "EN": "LAB07 resource group was not found" },
-    "ResourceGroupCheckFailed": { "LT": "Nepavyko patikrinti LAB07 resursų grupės", "EN": "Failed to check LAB07 resource group" },
-    "NoResourceGroup": { "LT": "Nėra LAB07 resursų grupės", "EN": "LAB07 resource group is missing" },
-
-    "SqlServerMissing": { "LT": "Nerastas SQL serveris", "EN": "SQL server was not found" },
-    "SecondSqlServerMissing": { "LT": "Rastas tik vienas SQL serveris", "EN": "Only one SQL server was found" },
-    "SqlServerCheckFailed": { "LT": "Nepavyko patikrinti SQL serverių", "EN": "Failed to check SQL servers" },
+    "Found": { "LT": "Rasta", "EN": "Found" },
+    "Active": { "LT": "aktyvi", "EN": "active" },
+    "NotDetected": { "LT": "nenustatyta", "EN": "not detected" },
+    "NoResourceGroup": { "LT": "Nėra LAB07 resursų grupės", "EN": "LAB07 Resource Group not found" },
+    "ResourceGroupMissing": { "LT": "Nerasta LAB07 resursų grupė", "EN": "LAB07 Resource Group was not found" },
+    "ResourceGroupCheckFailed": { "LT": "Nepavyko patikrinti LAB07 resursų grupės", "EN": "Failed to check the LAB07 Resource Group" },
+    "MultipleResourceGroups": { "LT": "rastos kelios tinkamos LAB07 resursų grupės", "EN": "multiple matching LAB07 Resource Groups found" },
+    "SqlServersMissing": { "LT": "Nerasti LAB07 SQL serveriai", "EN": "LAB07 SQL servers were not found" },
+    "SqlServerCountBad": { "LT": "Rasta SQL serverių: {0}; tikėtasi bent {1}", "EN": "SQL servers found: {0}; expected at least {1}" },
+    "SqlServersCheckFailed": { "LT": "Nepavyko patikrinti SQL serverių", "EN": "Failed to check SQL servers" },
     "SqlDatabaseMissing": { "LT": "Nerasta KK-Master-*-db duomenų bazė", "EN": "KK-Master-*-db database was not found" },
+    "SqlDatabaseConfigBad": { "LT": "tikėtasi Standard / S0 (10 DTU)", "EN": "expected Standard / S0 (10 DTU)" },
     "SqlDatabaseCheckFailed": { "LT": "Nepavyko patikrinti SQL duomenų bazės", "EN": "Failed to check SQL database" },
-
-    "GeoReplicationOk": { "LT": "Rastas aktyvus replication link", "EN": "Active replication link found" },
-    "GeoReplicationMissing": { "LT": "Geo-Replikacija nerasta", "EN": "Geo-Replication was not found" },
-    "GeoReplicationUnconfirmed": { "LT": "Du SQL serveriai ir DB kopijos yra, bet replication link nepatvirtintas", "EN": "Two SQL servers and database copies exist, but the replication link could not be confirmed" },
-    "GeoReplicationCheckFailed": { "LT": "Nepavyko patikrinti Geo-Replikacijos", "EN": "Failed to check Geo-Replication" },
-
-    "MaskingMissing": { "LT": "Nerastos Dynamic Data Masking taisyklės", "EN": "Dynamic Data Masking rules were not found" },
-    "MaskingPartial": { "LT": "Trūksta maskavimo stulpeliams", "EN": "Masking is missing for columns" },
-    "MaskingCheckFailed": { "LT": "Nepavyko patikrinti Dynamic Data Masking", "EN": "Failed to check Dynamic Data Masking" },
-
-    "MultipleCosmosAccounts": { "LT": "Rastos kelios Cosmos DB paskyros", "EN": "Multiple Cosmos DB accounts found" },
+    "GeoReplicationFound": { "LT": "Rastas aktyvus SQL geo-replikacijos ryšys", "EN": "Active SQL geo-replication link found" },
+    "GeoReplicationMissing": { "LT": "Nerastas SQL geo-replikacijos ryšys", "EN": "SQL geo-replication link was not found" },
+    "GeoReplicationCheckFailed": { "LT": "Nepavyko patikrinti SQL geo-replikacijos", "EN": "Failed to check SQL geo-replication" },
+    "DataMaskingFound": { "LT": "Rastos visos maskavimo taisyklės", "EN": "All masking rules found" },
+    "DataMaskingIncomplete": { "LT": "Trūksta maskavimo taisyklių stulpeliams", "EN": "Masking rules missing for columns" },
+    "DataMaskingMissing": { "LT": "Nerastos Data Masking taisyklės", "EN": "Data Masking rules were not found" },
+    "DataMaskingCheckFailed": { "LT": "Nepavyko patikrinti Data Masking", "EN": "Failed to check Data Masking" },
     "CosmosMissing": { "LT": "Nerasta Cosmos DB paskyra", "EN": "Cosmos DB account was not found" },
     "CosmosCheckFailed": { "LT": "Nepavyko patikrinti Cosmos DB paskyros", "EN": "Failed to check Cosmos DB account" },
+    "MultipleCosmosAccounts": { "LT": "rastos kelios Cosmos DB paskyros", "EN": "multiple Cosmos DB accounts found" },
     "CosmosDatabaseMissing": { "LT": "Nerasta Cosmos DB duomenų bazė Parduotuve", "EN": "Cosmos DB database Parduotuve was not found" },
+    "CosmosDatabaseCheckFailed": { "LT": "Nepavyko patikrinti Cosmos DB duomenų bazės", "EN": "Failed to check Cosmos DB database" },
     "CosmosContainerMissing": { "LT": "Nerastas Cosmos DB konteineris Prekes", "EN": "Cosmos DB container Prekes was not found" },
-    "PartitionKeyWrong": { "LT": "Neteisingas Partition Key, tikėtasi /kategorija", "EN": "Incorrect Partition Key, expected /kategorija" },
-    "TtlMissing": { "LT": "TTL neįjungtas Prekes konteineriui", "EN": "TTL is not enabled for the Prekes container" },
-    "CosmosStructureCheckFailed": { "LT": "Nepavyko patikrinti Cosmos DB struktūros", "EN": "Failed to check Cosmos DB structure" }
+    "CosmosContainerCheckFailed": { "LT": "Nepavyko patikrinti Cosmos DB konteinerio", "EN": "Failed to check Cosmos DB container" },
+    "PartitionKeyBad": { "LT": "Tikėtasi Partition Key /kategorija", "EN": "Expected Partition Key /kategorija" },
+    "TtlEnabled": { "LT": "TTL įjungtas (On - no default)", "EN": "TTL enabled (On - no default)" },
+    "TtlDisabled": { "LT": "TTL neįjungtas", "EN": "TTL is not enabled" },
+    "TtlDifferent": { "LT": "TTL įjungtas, bet nustatyta numatytoji reikšmė", "EN": "TTL enabled, but a default value is configured" }
   },
-
   "ResourceGroup": {
     "Pattern": "^RG-LAB07-.+$"
   },
-
   "Sql": {
-    "ServerPattern": "sqlsrv",
-    "DatabasePattern": "^KK-Master-.+-db$",
-    "MaskingColumns": ["EmailAddress", "PasswordHash", "LastName"]
+    "ServerNamePattern": "sqlsrv",
+    "ExpectedServerCount": 2,
+    "DatabaseNamePattern": "^KK-Master-.+-db$",
+    "DatabaseEdition": "Standard",
+    "ServiceObjective": "S0",
+    "DataMasking": {
+      "Schema": "SalesLT",
+      "Table": "Customer",
+      "Columns": ["EmailAddress", "PasswordHash", "LastName"]
+    }
   },
-
   "Cosmos": {
-    "AccountPattern": "cosmos$",
-    "DatabaseName": "Parduotuve",
-    "ContainerName": "Prekes",
-    "PartitionKey": "/kategorija"
+    "AccountNamePattern": "cosmos",
+    "DatabaseNamePattern": "^Parduotuv[eė]$",
+    "ContainerNamePattern": "^Prekes$",
+    "PartitionKey": "/kategorija",
+    "ExpectedDefaultTtl": -1
   }
 }
