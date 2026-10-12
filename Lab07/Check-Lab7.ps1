@@ -180,9 +180,15 @@ if ($dbCopies.Count -gt 0 -and $dbName) {
 
         $expectedColumns = @($LocCfg.Sql.DataMasking.Columns)
         $foundColumns = @(
-            $bestRules | Where-Object {
-                $_.SchemaName -eq $LocCfg.Sql.DataMasking.Schema -and $_.TableName -eq $LocCfg.Sql.DataMasking.Table
-            } | Select-Object -ExpandProperty ColumnName -Unique
+            $bestRules | ForEach-Object {
+                $schemaName = if ($_.PSObject.Properties["SchemaName"]) { $_.SchemaName } elseif ($_.Properties.PSObject.Properties["SchemaName"]) { $_.Properties.SchemaName } else { $null }
+                $tableName = if ($_.PSObject.Properties["TableName"]) { $_.TableName } elseif ($_.Properties.PSObject.Properties["TableName"]) { $_.Properties.TableName } else { $null }
+                $columnName = if ($_.PSObject.Properties["ColumnName"]) { $_.ColumnName } elseif ($_.Properties.PSObject.Properties["ColumnName"]) { $_.Properties.ColumnName } else { $null }
+
+                if ($schemaName -eq $LocCfg.Sql.DataMasking.Schema -and $tableName -eq $LocCfg.Sql.DataMasking.Table -and $columnName) {
+                    $columnName
+                }
+            } | Sort-Object -Unique
         )
         $missingColumns = @($expectedColumns | Where-Object { $_ -notin $foundColumns })
 
