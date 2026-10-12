@@ -1,189 +1,219 @@
-# --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 7 TIKRINIMAS: SQL & NoSQL (v11 - Server Logic)"
-Clear-Host
-Write-Host "--------------------------------------------------"
-Write-Host $ScriptVersion -ForegroundColor Magenta
-Write-Host "Vykdoma duomenų bazių konfigūracijos patikra..."
-Write-Host "--------------------------------------------------"
+# ============================================================
+# LAB 7 CHECKER - AZURE DATABASES (SQL & NoSQL)
+# ============================================================
 
-# --- 1. UŽKRAUNAME BENDRAS FUNKCIJAS ---
 try {
-    irm "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1" | iex
+    if ($PSScriptRoot) { . (Join-Path $PSScriptRoot '../configs/common.ps1') }
+    else { Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression }
 } catch {
-    Write-Error "Nepavyko užkrauti bazinių funkcijų."
-    exit
+    Write-Error "Failed to load common functions."
+    throw
 }
 
-# --- 2. INICIJUOJAME DARBĄ ---
-$ConfigUrl = "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab07/Check-Lab7-config.json"
+if ($Lang -notin @("LT", "EN")) { $Lang = "LT" }
+
+$Setup = Initialize-Lab -LocalConfigUrl "https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab07/Check-Lab7-config.json" -Lang $Lang
+$LocCfg = $Setup.LocalConfig
+$Check = $LocCfg.Checks
+$LabMsg = $LocCfg.Messages
+$Msg = $Setup.Messages
+$LabName = $LocCfg.LabName.$Lang
+$results = @()
+
+# ============================================================
+# 1. RESOURCE GROUP
+# ============================================================
+
 try {
-    $Setup = Initialize-Lab -LocalConfigUrl $ConfigUrl
-    $LocCfg = $Setup.LocalConfig
+    $allRGs = @(Get-AzResourceGroup -ErrorAction Stop)
+    $rgMatch = Find-PatternMatch -Items $allRGs -Property "ResourceGroupName" -Pattern $LocCfg.ResourceGroup.Pattern
+    $targetRG = $rgMatch.First
+
+    if ($targetRG) {
+        $status = if ($rgMatch.Count -gt 1) { "WARNING" } else { "OK" }
+        $message = $targetRG.ResourceGroupName
+        if ($rgMatch.Count -gt 1) { $message += "; $($LabMsg.MultipleResourceGroups.$Lang)" }
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status $status -Message $message -Messages $Msg
+    } else {
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status "ERROR" -Message $LabMsg.ResourceGroupMissing.$Lang -Messages $Msg
+    }
 } catch {
-    $LocCfg = @{ LabName = "Azure Databases" }
+    $targetRG = $null
+    Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status "WARNING" -Message $LabMsg.ResourceGroupCheckFailed.$Lang -Messages $Msg
 }
 
-$CurrentIdentity = az ad signed-in-user show --query userPrincipalName -o tsv
-if (-not $CurrentIdentity) { $CurrentIdentity = "Studentas" }
+# ============================================================
+# 2. AZURE SQL SERVERS
+# ============================================================
 
-# --- 3. DUOMENŲ RINKIMAS ---
-$resourceResults = @()
-
-# A. Resursų Grupė
-$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB07" } | Select-Object -First 1
-
-if ($labRG) {
-    $rgName = $labRG.ResourceGroupName
-    $rgText = "[OK] - Rasta grupė ($rgName)"
-    $rgColor = "Green"
-} else {
-    $rgName = ""
-    $rgText = "[KLAIDA] - Nerasta grupė RG-LAB07..."
-    $rgColor = "Red"
-}
-$resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText; Color = $rgColor }
-
-# B. SQL Serveris ir DB
 $sqlServers = @()
-if ($rgName) {
-    # Gauname VISUS SQL serverius grupėje
-    $sqlServers = Get-AzSqlServer -ResourceGroupName $rgName -ErrorAction SilentlyContinue
-}
+$dbCandidates = @()
+$primaryDb = $null
+$replicationLinkFound = $false
 
-# Imame pirmą pasitaikiusį kaip pagrindinį patikrai
-$mainServer = $sqlServers | Select-Object -First 1
+if ($targetRG) {
+    try {
+        $sqlServers = @(Get-AzSqlServer -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction Stop)
+        $serverMatch = Find-PatternMatch -Items $sqlServers -Property "ServerName" -Pattern $LocCfg.Sql.ServerPattern
 
-if ($mainServer) {
-    # Randame vartotojo kurtą DB
-    $db = Get-AzSqlDatabase -ServerName $mainServer.ServerName -ResourceGroupName $mainServer.ResourceGroupName | Where-Object { $_.DatabaseName -ne "master" } | Select-Object -First 1
-    
-    if ($db) {
-        $dbText = "[OK] - SQL DB rasta ($($db.DatabaseName))"
-        $dbColor = "Green"
-        
-        # 1. Geo-Replikacija (Logika: Ar yra antras serveris?)
-        $repText = "[TRŪKSTA] - Nerasta Geo-Replikacija (Trūksta antro serverio)"
-        $repColor = "Red"
-        
-        # Jei turime bent 2 SQL serverius grupėje, vadinasi replikacija paruošta
-        if ($sqlServers.Count -ge 2) {
-             $repText = "[OK] - Geo-Replikacija aktyvi (Rasti 2 serveriai)"
-             $repColor = "Green"
-        } 
-        # Atsarginis variantas: jei serveris vienas, bet galbūt veikia tikra replikacija
-        elseif ($db) {
-             $allLinks = Get-AzResource -ResourceGroupName $rgName -ResourceType "Microsoft.Sql/servers/databases/replicationLinks" -ErrorAction SilentlyContinue
-             if ($allLinks) {
-                $repText = "[OK] - Geo-Replikacija aktyvi (Link Found)"
-                $repColor = "Green"
-             }
+        if ($serverMatch.Count -ge 2) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.SqlServers.$Lang -Status "OK" -Message ($serverMatch.All.ServerName -join ", ") -Messages $Msg
+        } elseif ($serverMatch.Count -eq 1) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.SqlServers.$Lang -Status "ERROR" -Message $LabMsg.SecondSqlServerMissing.$Lang -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.SqlServers.$Lang -Status "ERROR" -Message $LabMsg.SqlServerMissing.$Lang -Messages $Msg
         }
-
-        # 2. Maskavimas (Data Masking)
-        $maskText = "[TRŪKSTA] - Nerastos Data Masking taisyklės"
-        $maskColor = "Red"
-        
-        try {
-            $rules = Get-AzSqlDatabaseDataMaskingRule -ServerName $mainServer.ServerName -ResourceGroupName $mainServer.ResourceGroupName -DatabaseName $db.DatabaseName -ErrorAction SilentlyContinue
-            if ($rules -and $rules.Count -gt 0) {
-                $maskText = "[OK] - Rasta maskavimo taisyklių: $($rules.Count)"
-                $maskColor = "Green"
-            }
-        } catch {}
-
-    } else {
-        $dbText = "[KLAIDA] - SQL Serveris yra, bet duomenų bazės nėra"
-        $dbColor = "Red"
-        $repText = "-"; $maskText = "-"
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.SqlServers.$Lang -Status "WARNING" -Message $LabMsg.SqlServerCheckFailed.$Lang -Messages $Msg
     }
 } else {
-    $dbText = "[TRŪKSTA] - Nerastas SQL Serveris"
-    $dbColor = "Red"
-    $repText = "-"; $maskText = "-"
+    Add-LabResult -Results ([ref]$results) -Name $Check.SqlServers.$Lang -Status "ERROR" -Message $LabMsg.NoResourceGroup.$Lang -Messages $Msg
 }
 
-$resourceResults += [PSCustomObject]@{ Name = "SQL Duomenų bazė"; Text = $dbText; Color = $dbColor }
-if ($repText -ne "-") { $resourceResults += [PSCustomObject]@{ Name = "Geo-Replikacija"; Text = $repText; Color = $repColor } }
-if ($maskText -ne "-") { $resourceResults += [PSCustomObject]@{ Name = "Data Masking"; Text = $maskText; Color = $maskColor } }
+# ============================================================
+# 3. SQL DATABASE + GEO-REPLICATION
+# ============================================================
 
-
-# C. Cosmos DB (Smart Loop)
-$cosText = "[TRŪKSTA] - Nerasta Cosmos DB paskyra"
-$cosColor = "Red"
-$cosConText = "-"; $cosRegText = "-"
-$bestCosmosFound = $false
-
-if ($rgName) {
-    # Gauname VISAS Cosmos DB paskyras grupėje
-    $allCosmos = Get-AzCosmosDBAccount -ResourceGroupName $rgName -ErrorAction SilentlyContinue
-    
-    foreach ($cosmosCandidate in $allCosmos) {
-        # Tikriname kiekvieną paskyrą - ieškome tos, kuri turi daugiau nei 1 regioną
-        $tempLocCount = $cosmosCandidate.Locations.Count
-        
-        if ($tempLocCount -ge 2) {
-            $cosmosObj = $cosmosCandidate
-            $bestCosmosFound = $true
-            break 
+if ($sqlServers.Count -gt 0) {
+    try {
+        foreach ($server in $sqlServers) {
+            $dbs = @(Get-AzSqlDatabase -ResourceGroupName $server.ResourceGroupName -ServerName $server.ServerName -ErrorAction Stop | Where-Object DatabaseName -NE "master")
+            foreach ($db in $dbs) {
+                if ($db.DatabaseName -match $LocCfg.Sql.DatabasePattern) {
+                    $dbCandidates += [PSCustomObject]@{ Server = $server; Database = $db }
+                }
+            }
         }
+
+        if ($dbCandidates.Count -gt 0) {
+            $primaryDb = $dbCandidates | Select-Object -First 1
+            $uniqueDbNames = @($dbCandidates.Database.DatabaseName | Sort-Object -Unique)
+            $status = if ($uniqueDbNames.Count -gt 1) { "WARNING" } else { "OK" }
+            Add-LabResult -Results ([ref]$results) -Name $Check.SqlDatabase.$Lang -Status $status -Message ($uniqueDbNames -join ", ") -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.SqlDatabase.$Lang -Status "ERROR" -Message $LabMsg.SqlDatabaseMissing.$Lang -Messages $Msg
+        }
+
+        foreach ($item in $dbCandidates) {
+            try {
+                $links = @(Get-AzSqlDatabaseReplicationLink -ResourceGroupName $item.Server.ResourceGroupName -ServerName $item.Server.ServerName -DatabaseName $item.Database.DatabaseName -ErrorAction Stop)
+                if ($links.Count -gt 0) { $replicationLinkFound = $true; break }
+            } catch {}
+        }
+
+        if ($replicationLinkFound) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.GeoReplication.$Lang -Status "OK" -Message $LabMsg.GeoReplicationOk.$Lang -Messages $Msg
+        } elseif ($sqlServers.Count -ge 2 -and $dbCandidates.Count -ge 2) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.GeoReplication.$Lang -Status "WARNING" -Message $LabMsg.GeoReplicationUnconfirmed.$Lang -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.GeoReplication.$Lang -Status "ERROR" -Message $LabMsg.GeoReplicationMissing.$Lang -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.SqlDatabase.$Lang -Status "WARNING" -Message $LabMsg.SqlDatabaseCheckFailed.$Lang -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $Check.GeoReplication.$Lang -Status "WARNING" -Message $LabMsg.GeoReplicationCheckFailed.$Lang -Messages $Msg
     }
-    
-    # Jei neradome geros, imame bet kurią
-    if (-not $bestCosmosFound -and $allCosmos) {
-        $cosmosObj = $allCosmos | Select-Object -First 1
-    }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.SqlDatabase.$Lang -Status "ERROR" -Message $LabMsg.SqlDatabaseMissing.$Lang -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $Check.GeoReplication.$Lang -Status "ERROR" -Message $LabMsg.GeoReplicationMissing.$Lang -Messages $Msg
 }
 
-if ($cosmosObj) {
-    $cosText = "[OK] - Cosmos DB paskyra rasta ($($cosmosObj.Name))"
-    $cosColor = "Green"
+# ============================================================
+# 4. DYNAMIC DATA MASKING
+# ============================================================
 
-    # 3. Tikriname Consistency
-    $consLevel = $cosmosObj.ConsistencyPolicy.DefaultConsistencyLevel
-    if ($consLevel -eq "Eventual") {
-        $cosConText = "[OK] - Konsistencija: Eventual"
-        $cosConColor = "Green"
-    } else {
-        $cosConText = "[INFO] - Konsistencija: $consLevel (Rekomenduota: Eventual)"
-        $cosConColor = "Yellow"
+if ($primaryDb) {
+    try {
+        $rules = @(Get-AzSqlDatabaseDataMaskingRule -ResourceGroupName $primaryDb.Server.ResourceGroupName -ServerName $primaryDb.Server.ServerName -DatabaseName $primaryDb.Database.DatabaseName -ErrorAction Stop)
+        $expectedColumns = @($LocCfg.Sql.MaskingColumns)
+        $foundColumns = @($rules | ForEach-Object { $_.ColumnName } | Sort-Object -Unique)
+        $missingColumns = @($expectedColumns | Where-Object { $_ -notin $foundColumns })
+
+        if ($missingColumns.Count -eq 0) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "OK" -Message ($expectedColumns -join ", ") -Messages $Msg
+        } elseif ($rules.Count -gt 0) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "WARNING" -Message "$($LabMsg.MaskingPartial.$Lang): $($missingColumns -join ', ')" -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "ERROR" -Message $LabMsg.MaskingMissing.$Lang -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "WARNING" -Message $LabMsg.MaskingCheckFailed.$Lang -Messages $Msg
     }
-    
-    # 4. Tikriname Regionus
-    $locCount = $cosmosObj.Locations.Count
-    if ($locCount -ge 2) {
-        $cosRegText = "[OK] - Globali replikacija aktyvi (Regionų: $locCount)"
-        $cosRegColor = "Green"
-    } else {
-        $cosRegText = "[DĖMESIO] - Rasta tik 1 lokacija"
-        $cosRegColor = "Yellow"
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "ERROR" -Message $LabMsg.SqlDatabaseMissing.$Lang -Messages $Msg
+}
+
+# ============================================================
+# 5. COSMOS DB ACCOUNT
+# ============================================================
+
+$cosmos = $null
+if ($targetRG) {
+    try {
+        $allCosmos = @(Get-AzCosmosDBAccount -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction Stop)
+        $cosmosMatch = Find-PatternMatch -Items $allCosmos -Property "Name" -Pattern $LocCfg.Cosmos.AccountPattern
+        $cosmos = $cosmosMatch.First
+
+        if ($cosmos) {
+            $status = if ($cosmosMatch.Count -gt 1) { "WARNING" } else { "OK" }
+            $message = $cosmos.Name
+            if ($cosmosMatch.Count -gt 1) { $message += "; $($LabMsg.MultipleCosmosAccounts.$Lang)" }
+            Add-LabResult -Results ([ref]$results) -Name $Check.CosmosAccount.$Lang -Status $status -Message $message -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.CosmosAccount.$Lang -Status "ERROR" -Message $LabMsg.CosmosMissing.$Lang -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.CosmosAccount.$Lang -Status "WARNING" -Message $LabMsg.CosmosCheckFailed.$Lang -Messages $Msg
     }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.CosmosAccount.$Lang -Status "ERROR" -Message $LabMsg.NoResourceGroup.$Lang -Messages $Msg
 }
 
-$resourceResults += [PSCustomObject]@{ Name = "Cosmos DB (NoSQL)"; Text = $cosText; Color = $cosColor }
-if ($cosColor -eq "Green") {
-    $resourceResults += [PSCustomObject]@{ Name = " - Replikacija"; Text = $cosRegText; Color = $cosRegColor }
-    $resourceResults += [PSCustomObject]@{ Name = " - Konsistencija"; Text = $cosConText; Color = $cosConColor }
+# ============================================================
+# 6. COSMOS DATABASE + CONTAINER + TTL
+# ============================================================
+
+if ($cosmos -and $targetRG) {
+    try {
+        $cosmosDb = Get-AzCosmosDBSqlDatabase -ResourceGroupName $targetRG.ResourceGroupName -AccountName $cosmos.Name -Name $LocCfg.Cosmos.DatabaseName -ErrorAction Stop
+
+        if ($cosmosDb) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.CosmosDatabase.$Lang -Status "OK" -Message $LocCfg.Cosmos.DatabaseName -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.CosmosDatabase.$Lang -Status "ERROR" -Message $LabMsg.CosmosDatabaseMissing.$Lang -Messages $Msg
+        }
+
+        $container = Get-AzCosmosDBSqlContainer -ResourceGroupName $targetRG.ResourceGroupName -AccountName $cosmos.Name -DatabaseName $LocCfg.Cosmos.DatabaseName -Name $LocCfg.Cosmos.ContainerName -ErrorAction Stop
+
+        if ($container) {
+            $partitionPaths = @($container.Resource.PartitionKey.Paths)
+            $partitionOk = $partitionPaths -contains $LocCfg.Cosmos.PartitionKey
+            $ttlValue = $container.Resource.DefaultTtl
+            $ttlEnabled = $null -ne $ttlValue
+
+            if ($partitionOk) {
+                Add-LabResult -Results ([ref]$results) -Name $Check.CosmosContainer.$Lang -Status "OK" -Message "$($LocCfg.Cosmos.ContainerName); $($LocCfg.Cosmos.PartitionKey)" -Messages $Msg
+            } else {
+                Add-LabResult -Results ([ref]$results) -Name $Check.CosmosContainer.$Lang -Status "ERROR" -Message $LabMsg.PartitionKeyWrong.$Lang -Messages $Msg
+            }
+
+            Add-LabResult -Results ([ref]$results) -Name $Check.CosmosTtl.$Lang -Status $(if ($ttlEnabled) { "OK" } else { "ERROR" }) -Message $(if ($ttlEnabled) { "TTL=$ttlValue" } else { $LabMsg.TtlMissing.$Lang }) -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.CosmosContainer.$Lang -Status "ERROR" -Message $LabMsg.CosmosContainerMissing.$Lang -Messages $Msg
+            Add-LabResult -Results ([ref]$results) -Name $Check.CosmosTtl.$Lang -Status "ERROR" -Message $LabMsg.TtlMissing.$Lang -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.CosmosDatabase.$Lang -Status "WARNING" -Message $LabMsg.CosmosStructureCheckFailed.$Lang -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $Check.CosmosContainer.$Lang -Status "WARNING" -Message $LabMsg.CosmosStructureCheckFailed.$Lang -Messages $Msg
+        Add-LabResult -Results ([ref]$results) -Name $Check.CosmosTtl.$Lang -Status "WARNING" -Message $LabMsg.CosmosStructureCheckFailed.$Lang -Messages $Msg
+    }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.CosmosDatabase.$Lang -Status "ERROR" -Message $LabMsg.CosmosMissing.$Lang -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $Check.CosmosContainer.$Lang -Status "ERROR" -Message $LabMsg.CosmosMissing.$Lang -Messages $Msg
+    Add-LabResult -Results ([ref]$results) -Name $Check.CosmosTtl.$Lang -Status "ERROR" -Message $LabMsg.CosmosMissing.$Lang -Messages $Msg
 }
 
-# --- 4. IŠVEDIMAS ---
-$date = Get-Date -Format "yyyy-MM-dd HH:mm"
+# ============================================================
+# GALUTINIS REZULTATAS
+# ============================================================
 
-Write-Host "`n--- GALUTINIS REZULTATAS (Padarykite nuotrauką) ---" -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Gray
-if ($Setup.HeaderTitle) { Write-Host "$($Setup.HeaderTitle)" }
-Write-Host "$($LocCfg.LabName)" -ForegroundColor Yellow
-Write-Host "Data: $date"
-Write-Host "Studentas: $CurrentIdentity"
-Write-Host "==================================================" -ForegroundColor Gray
-
-foreach ($res in $resourceResults) {
-    $label = "$($res.Name):"
-    $targetWidth = 35
-    $neededSpaces = $targetWidth - $label.Length
-    if ($neededSpaces -lt 1) { $neededSpaces = 1 }
-    $padding = " " * $neededSpaces
-    Write-Host "$label$padding" -NoNewline
-    Write-Host $res.Text -ForegroundColor $res.Color
-}
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host ""
+Show-LabResults -Setup $Setup -LabName $LabName -Results $results -LabelWidth 32
