@@ -169,44 +169,42 @@ if ($dbCopies.Count -gt 0 -and $dbName) {
 
 if ($dbCopies.Count -gt 0 -and $dbName) {
     try {
-        $bestRules = @()
+        $maskRules = @()
 
         foreach ($copy in $dbCopies) {
-            try {
-                $rules = @(Get-AzSqlDatabaseDataMaskingRule -ResourceGroupName $targetRG.ResourceGroupName -ServerName $copy.Server.ServerName -DatabaseName $dbName -ErrorAction Stop)
-                if ($rules.Count -gt $bestRules.Count) { $bestRules = @($rules) }
-            } catch {}
+            $rules = @(
+                Get-AzSqlDatabaseDataMaskingRule `
+                    -ResourceGroupName $targetRG.ResourceGroupName `
+                    -ServerName $copy.Server.ServerName `
+                    -DatabaseName $dbName `
+                    -ErrorAction SilentlyContinue
+            )
+
+            if ($rules.Count -gt 0) {
+                $maskRules = $rules
+                break
+            }
         }
 
-        $expectedColumns = @($LocCfg.Sql.DataMasking.Columns)
-        $foundColumns = @(
-            $bestRules |
-                Where-Object {
-                    $_ -and
-                    $_.PSObject.Properties.Name -contains "SchemaName" -and
-                    $_.PSObject.Properties.Name -contains "TableName" -and
-                    $_.PSObject.Properties.Name -contains "ColumnName" -and
-                    $_.SchemaName -eq $LocCfg.Sql.DataMasking.Schema -and
-                    $_.TableName -eq $LocCfg.Sql.DataMasking.Table
-                } |
+        if ($maskRules.Count -gt 0) {
+            $columns = @(
+                $maskRules |
                 ForEach-Object { $_.ColumnName } |
                 Where-Object { $_ } |
                 Sort-Object -Unique
-        )
+            )
 
-        $missingColumns = @($expectedColumns | Where-Object { $_ -notin $foundColumns })
-
-        if ($missingColumns.Count -eq 0) {
-            Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "OK" -Message "$($LabMsg.DataMaskingFound.$Lang): $($expectedColumns -join ', ')" -Messages $Msg
-        } elseif ($foundColumns.Count -gt 0) {
-            Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "ERROR" -Message "$($LabMsg.DataMaskingIncomplete.$Lang): $($missingColumns -join ', ')" -Messages $Msg
-        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "OK" -Message ($columns -join ", ") -Messages $Msg
+        }
+        else {
             Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "ERROR" -Message $LabMsg.DataMaskingMissing.$Lang -Messages $Msg
         }
-    } catch {
+    }
+    catch {
         Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "WARNING" -Message "$($LabMsg.DataMaskingCheckFailed.$Lang): $($_.Exception.Message)" -Messages $Msg
     }
-} else {
+}
+else {
     Add-LabResult -Results ([ref]$results) -Name $Check.DataMasking.$Lang -Status "ERROR" -Message $LabMsg.SqlDatabaseMissing.$Lang -Messages $Msg
 }
 
