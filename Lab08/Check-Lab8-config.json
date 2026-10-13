@@ -52,7 +52,7 @@
     "ExpectedInstanceCount": 2
   },
   "WebApp": {
-    "NamePattern": "-webapp$"
+    "NamePattern": "-web-appsvc$"
   },
   "DeploymentSlot": {
     "NamePattern": "(testavimo-aplinka|testing-env)$"
