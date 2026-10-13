@@ -1,123 +1,224 @@
-# --- VERSIJOS KONTROLĖ ---
-$ScriptVersion = "LAB 8 TIKRINIMAS: Web Apps & Monitoring (Final v2)"
-Clear-Host
-Write-Host "--------------------------------------------------"
-Write-Host $ScriptVersion -ForegroundColor Magenta
-Write-Host "Vykdoma konfigūracijos patikra..."
-Write-Host "--------------------------------------------------"
+# ============================================================
+# LAB 8 CHECKER - AZURE WEB APPS
+# ============================================================
 
-# --- 1. PASIRUOŠIMAS ---
-$resourceResults = @()
-
-# Bandome gauti resursų grupę
-$labRG = Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -match "RG-LAB08" } | Select-Object -First 1
-
-# A. Resursų Grupė
-if ($labRG) {
-    $rgText = "[OK] - Rasta grupė ($($labRG.ResourceGroupName))"
-    $rgColor = "Green"
-} else {
-    $rgText = "[KLAIDA] - Nerasta grupė, prasidedanti 'RG-LAB08...'"
-    $rgColor = "Red"
-}
-$resourceResults += [PSCustomObject]@{ Name = "Resursų grupė"; Text = $rgText; Color = $rgColor }
-
-if ($labRG) {
-    # B. App Service Plan (Planas ir Scale Out)
-    $appPlan = Get-AzAppServicePlan | Where-Object { $_.ResourceGroup -eq $labRG.ResourceGroupName } | Select-Object -First 1
-    
-    if ($appPlan) {
-        $tier = $appPlan.Sku.Tier
-        if ($tier -ne "Free" -and $tier -ne "Shared") {
-            $planStatus = "[OK] - Planas tinkamas ($tier - $($appPlan.Sku.Name))"
-            $planColor = "Green"
-        } else {
-            $planStatus = "[KLAIDA] - Pasirinktas nemokamas planas ($tier). Reikia S1 arba P0v3"
-            $planColor = "Red"
-        }
-
-        $serverCount = $appPlan.Sku.Capacity
-        if ($serverCount -ge 2) {
-            $scaleStatus = "[OK] - Scale Out aktyvus (Serverių: $serverCount)"
-            $scaleColor = "Green"
-        } else {
-            $scaleStatus = "[TRŪKSTA] - Naudojamas tik $serverCount serveris. Padidinkite iki 2."
-            $scaleColor = "Red"
-        }
-
+# --- Load common functions ---
+try {
+    if ($PSScriptRoot) {
+        . (Join-Path $PSScriptRoot '../configs/common.ps1')
     } else {
-        $planStatus = "[KLAIDA] - Nerastas App Service planas"
-        $planColor = "Red"
-        $scaleStatus = "-"
-        $scaleColor = "Gray"
+        Invoke-RestMethod 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/configs/common.ps1' -ErrorAction Stop | Invoke-Expression
     }
-    
-    $resourceResults += [PSCustomObject]@{ Name = "Planas (Pricing)"; Text = $planStatus; Color = $planColor }
-    $resourceResults += [PSCustomObject]@{ Name = "Skalieravimas"; Text = $scaleStatus; Color = $scaleColor }
+} catch {
+    Write-Error "Failed to load common functions."
+    throw
+}
 
-    # C. Web App ir Slots
-    $webApp = Get-AzWebApp -ResourceGroupName $labRG.ResourceGroupName | Select-Object -First 1
-    
-    if ($webApp) {
-        $webText = "[OK] - Web App rasta ($($webApp.Name))"
-        $webColor = "Green"
-        
-        # PATIKRA: Tikriname 'testavimo-aplinka' ARBA 'testing-env' lizdą
-        $slots = Get-AzWebAppSlot -ResourceGroupName $labRG.ResourceGroupName -Name $webApp.Name
-        $targetSlot = $slots | Where-Object { $_.Name -match "testavimo-aplinka|testing-env" }
+if ($Lang -notin @('LT', 'EN')) { $Lang = 'LT' }
+
+$Setup = Initialize-Lab -LocalConfigUrl 'https://raw.githubusercontent.com/Kauno-Kolegija/KK-Azure/main/Lab08/Check-Lab8-config.json' -Lang $Lang
+$LocCfg = $Setup.LocalConfig
+$Check = $LocCfg.Checks
+$LabMsg = $LocCfg.Messages
+$Msg = $Setup.Messages
+$LabName = $LocCfg.LabName.$Lang
+$results = @()
+
+# ============================================================
+# 1. RESOURCE GROUP
+# ============================================================
+
+try {
+    $allRGs = @(Get-AzResourceGroup -ErrorAction Stop)
+    $rgMatch = Find-PatternMatch -Items $allRGs -Property 'ResourceGroupName' -Pattern $LocCfg.ResourceGroup.Pattern
+    $targetRG = $rgMatch.First
+
+    if ($targetRG) {
+        $status = if ($rgMatch.Count -gt 1) { 'WARNING' } else { 'OK' }
+        $message = "$($LabMsg.Found.$Lang) $($targetRG.ResourceGroupName)"
+        if ($rgMatch.Count -gt 1) { $message += "; $($LabMsg.MultipleResourceGroups.$Lang)" }
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status $status -Message $message -Messages $Msg
+    } else {
+        Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status 'ERROR' -Message $LabMsg.ResourceGroupMissing.$Lang -Messages $Msg
+    }
+} catch {
+    $targetRG = $null
+    Add-LabResult -Results ([ref]$results) -Name $Check.ResourceGroup.$Lang -Status 'WARNING' -Message $LabMsg.ResourceGroupCheckFailed.$Lang -Messages $Msg
+}
+
+# ============================================================
+# 2. APP SERVICE PLAN
+# ============================================================
+
+$appPlan = $null
+
+if ($targetRG) {
+    try {
+        $plans = @(Get-AzAppServicePlan -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction Stop)
+        $planMatch = Find-PatternMatch -Items $plans -Property 'Name' -Pattern $LocCfg.AppServicePlan.NamePattern
+        $appPlan = if ($planMatch.First) { $planMatch.First } else { $plans | Select-Object -First 1 }
+
+        if ($appPlan) {
+            $tier = [string]$appPlan.Sku.Tier
+            $sku = [string]$appPlan.Sku.Name
+            $isExactSku = $sku -ieq $LocCfg.AppServicePlan.ExpectedSku
+            $isUnsupported = $tier -in @('Free', 'Shared')
+
+            if ($isExactSku) {
+                Add-LabResult -Results ([ref]$results) -Name $Check.AppServicePlan.$Lang -Status 'OK' -Message "$($appPlan.Name) - $tier / $sku" -Messages $Msg
+            } elseif ($isUnsupported) {
+                Add-LabResult -Results ([ref]$results) -Name $Check.AppServicePlan.$Lang -Status 'ERROR' -Message "$($appPlan.Name) - $tier / $sku; $($LabMsg.PlanUnsupported.$Lang)" -Messages $Msg
+            } else {
+                Add-LabResult -Results ([ref]$results) -Name $Check.AppServicePlan.$Lang -Status 'WARNING' -Message "$($appPlan.Name) - $tier / $sku; $($LabMsg.PlanDifferent.$Lang)" -Messages $Msg
+            }
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.AppServicePlan.$Lang -Status 'ERROR' -Message $LabMsg.PlanMissing.$Lang -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.AppServicePlan.$Lang -Status 'WARNING' -Message $LabMsg.PlanCheckFailed.$Lang -Messages $Msg
+    }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.AppServicePlan.$Lang -Status 'ERROR' -Message $LabMsg.NoResourceGroup.$Lang -Messages $Msg
+}
+
+# ============================================================
+# 3. SCALE OUT
+# Expected count is in config so it can be changed later without
+# changing the checker code.
+# ============================================================
+
+if ($appPlan) {
+    try {
+        $instanceCount = [int]$appPlan.Sku.Capacity
+        $expectedCount = [int]$LocCfg.AppServicePlan.ExpectedInstanceCount
+
+        if ($instanceCount -eq $expectedCount) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.ScaleOut.$Lang -Status 'OK' -Message "$instanceCount $($LabMsg.Instances.$Lang)" -Messages $Msg
+        } elseif ($instanceCount -gt $expectedCount) {
+            Add-LabResult -Results ([ref]$results) -Name $Check.ScaleOut.$Lang -Status 'WARNING' -Message "$instanceCount $($LabMsg.Instances.$Lang); $($LabMsg.TooManyInstances.$Lang)" -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.ScaleOut.$Lang -Status 'ERROR' -Message "$instanceCount $($LabMsg.Instances.$Lang); $($LabMsg.ExpectedInstances.$Lang) $expectedCount" -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.ScaleOut.$Lang -Status 'WARNING' -Message $LabMsg.ScaleCheckFailed.$Lang -Messages $Msg
+    }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.ScaleOut.$Lang -Status 'ERROR' -Message $LabMsg.PlanMissing.$Lang -Messages $Msg
+}
+
+# ============================================================
+# 4. WEB APP
+# ============================================================
+
+$webApp = $null
+
+if ($targetRG) {
+    try {
+        $webApps = @(Get-AzWebApp -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction Stop)
+        $webMatch = Find-PatternMatch -Items $webApps -Property 'Name' -Pattern $LocCfg.WebApp.NamePattern
+        $webApp = $webMatch.First
+
+        if ($webApp) {
+            $status = if ($webMatch.Count -gt 1) { 'WARNING' } else { 'OK' }
+            $message = "$($LabMsg.Found.$Lang) $($webApp.Name)"
+            if ($webMatch.Count -gt 1) { $message += "; $($LabMsg.MultipleWebApps.$Lang)" }
+            Add-LabResult -Results ([ref]$results) -Name $Check.WebApp.$Lang -Status $status -Message $message -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.WebApp.$Lang -Status 'ERROR' -Message $LabMsg.WebAppMissing.$Lang -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.WebApp.$Lang -Status 'WARNING' -Message $LabMsg.WebAppCheckFailed.$Lang -Messages $Msg
+    }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.WebApp.$Lang -Status 'ERROR' -Message $LabMsg.NoResourceGroup.$Lang -Messages $Msg
+}
+
+# ============================================================
+# 5. DEPLOYMENT SLOT
+# We verify final state (slot exists), not the historical Swap action.
+# ============================================================
+
+$targetSlot = $null
+
+if ($webApp) {
+    try {
+        $slots = @(Get-AzWebAppSlot -ResourceGroupName $targetRG.ResourceGroupName -Name $webApp.Name -ErrorAction Stop)
+        $targetSlot = $slots | Where-Object {
+            ([string]$_.Name -match $LocCfg.DeploymentSlot.NamePattern) -or
+            ($_.PSObject.Properties['Slot'] -and [string]$_.Slot -match $LocCfg.DeploymentSlot.NamePattern)
+        } | Select-Object -First 1
 
         if ($targetSlot) {
-            # Paimame rasto lizdo pavadinimą atvaizdavimui
-            $foundSlotName = ($targetSlot | Select-Object -First 1).Name
-            $slotText = "[OK] - Rastas lizdas ($foundSlotName)"
-            $slotColor = "Green"
+            $slotName = if ($targetSlot.PSObject.Properties['Slot'] -and $targetSlot.Slot) { $targetSlot.Slot } else { ([string]$targetSlot.Name -split '/')[-1] }
+            Add-LabResult -Results ([ref]$results) -Name $Check.DeploymentSlot.$Lang -Status 'OK' -Message $slotName -Messages $Msg
         } else {
-            $slotText = "[TRŪKSTA] - Nerastas Deployment Slot ('testavimo-aplinka' arba 'testing-env')"
-            $slotColor = "Red"
+            Add-LabResult -Results ([ref]$results) -Name $Check.DeploymentSlot.$Lang -Status 'ERROR' -Message $LabMsg.SlotMissing.$Lang -Messages $Msg
         }
-    } else {
-        $webText = "[KLAIDA] - Nerasta Web App"
-        $webColor = "Red"
-        $slotText = "-"
-        $slotColor = "Gray"
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.DeploymentSlot.$Lang -Status 'WARNING' -Message $LabMsg.SlotCheckFailed.$Lang -Messages $Msg
     }
-    
-    $resourceResults += [PSCustomObject]@{ Name = "Web Aplikacija"; Text = $webText; Color = $webColor }
-    $resourceResults += [PSCustomObject]@{ Name = "Deployment Slots"; Text = $slotText; Color = $slotColor }
-
-    # D. Monitoringas ir Alerts
-    $alerts = Get-AzMetricAlertRuleV2 -ResourceGroupName $labRG.ResourceGroupName -ErrorAction SilentlyContinue
-    
-    if ($alerts -and $alerts.Count -ge 1) {
-        $alertText = "[OK] - Rasta Alert taisyklė ($($alerts[0].Name))"
-        $alertColor = "Green"
-    } else {
-        $alertText = "[TRŪKSTA] - Nesukurtas 'Alert Rule' (Monitoringas)"
-        $alertColor = "Red"
-    }
-    $resourceResults += [PSCustomObject]@{ Name = "Alerts (Įspėjimai)"; Text = $alertText; Color = $alertColor }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.DeploymentSlot.$Lang -Status 'ERROR' -Message $LabMsg.WebAppMissing.$Lang -Messages $Msg
 }
 
-# --- 3. REZULTATŲ IŠVEDIMAS ---
-$date = Get-Date -Format "yyyy-MM-dd HH:mm"
-$user = az ad signed-in-user show --query userPrincipalName -o tsv
+# ============================================================
+# 6. APPLICATION INSIGHTS
+# Check the Application Insights component created for LAB08.
+# ============================================================
 
-Write-Host "`n--- GALUTINIS REZULTATAS ---" -ForegroundColor Cyan
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host "LAB 08: Azure Web Apps & Monitoring" -ForegroundColor Yellow
-Write-Host "Data: $date"
-Write-Host "Studentas: $user"
-Write-Host "==================================================" -ForegroundColor Gray
+if ($targetRG) {
+    try {
+        $insights = @(Get-AzResource -ResourceGroupName $targetRG.ResourceGroupName -ResourceType 'Microsoft.Insights/components' -ErrorAction Stop)
 
-foreach ($res in $resourceResults) {
-    $label = "$($res.Name):"
-    $targetWidth = 25
-    $neededSpaces = $targetWidth - $label.Length
-    if ($neededSpaces -lt 1) { $neededSpaces = 1 }
-    $padding = " " * $neededSpaces
-    
-    Write-Host "$label$padding" -NoNewline
-    Write-Host $res.Text -ForegroundColor $res.Color
+        if ($insights.Count -gt 0) {
+            $names = @($insights | ForEach-Object { $_.Name }) -join ', '
+            Add-LabResult -Results ([ref]$results) -Name $Check.ApplicationInsights.$Lang -Status 'OK' -Message $names -Messages $Msg
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.ApplicationInsights.$Lang -Status 'ERROR' -Message $LabMsg.ApplicationInsightsMissing.$Lang -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.ApplicationInsights.$Lang -Status 'WARNING' -Message $LabMsg.ApplicationInsightsCheckFailed.$Lang -Messages $Msg
+    }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.ApplicationInsights.$Lang -Status 'ERROR' -Message $LabMsg.NoResourceGroup.$Lang -Messages $Msg
 }
-Write-Host "==================================================" -ForegroundColor Gray
-Write-Host ""
+
+# ============================================================
+# 7. METRIC ALERT
+# Prefer an alert scoped to the LAB08 Web App. If a metric alert exists
+# in the RG but scope cannot be confirmed, return WARNING instead of ERROR.
+# ============================================================
+
+if ($targetRG) {
+    try {
+        $alerts = @(Get-AzMetricAlertRuleV2 -ResourceGroupName $targetRG.ResourceGroupName -ErrorAction Stop)
+
+        if ($alerts.Count -gt 0) {
+            $scopedAlert = $null
+
+            if ($webApp) {
+                $scopedAlert = $alerts | Where-Object {
+                    @($_.Scopes) -contains $webApp.Id
+                } | Select-Object -First 1
+            }
+
+            if ($scopedAlert) {
+                Add-LabResult -Results ([ref]$results) -Name $Check.MetricAlert.$Lang -Status 'OK' -Message $scopedAlert.Name -Messages $Msg
+            } else {
+                Add-LabResult -Results ([ref]$results) -Name $Check.MetricAlert.$Lang -Status 'WARNING' -Message "$($alerts[0].Name); $($LabMsg.AlertScopeNotConfirmed.$Lang)" -Messages $Msg
+            }
+        } else {
+            Add-LabResult -Results ([ref]$results) -Name $Check.MetricAlert.$Lang -Status 'ERROR' -Message $LabMsg.AlertMissing.$Lang -Messages $Msg
+        }
+    } catch {
+        Add-LabResult -Results ([ref]$results) -Name $Check.MetricAlert.$Lang -Status 'WARNING' -Message $LabMsg.AlertCheckFailed.$Lang -Messages $Msg
+    }
+} else {
+    Add-LabResult -Results ([ref]$results) -Name $Check.MetricAlert.$Lang -Status 'ERROR' -Message $LabMsg.NoResourceGroup.$Lang -Messages $Msg
+}
+
+# ============================================================
+# RESULTS
+# ============================================================
+
+Show-LabResults -Setup $Setup -LabName $LabName -Results $results

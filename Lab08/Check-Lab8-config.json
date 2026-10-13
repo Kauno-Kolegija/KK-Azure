@@ -1,18 +1,60 @@
 {
-  "LabName": "LAB 08: Azure Web Apps stebėjimas ir įspėjimai",
-  "ResourceGroupPattern": "RG-LAB08",
-  "RequiredResources": [
-    {
-      "Type": "Microsoft.Web/serverfarms",
-      "Name": "App Service Plan"
-    },
-    {
-      "Type": "Microsoft.Web/sites",
-      "Name": "Web App"
-    },
-    {
-      "Type": "Microsoft.Insights/metricAlerts",
-      "Name": "Alert Rule (Monitoring)"
-    }
-  ]
+  "LabName": {
+    "LT": "LAB 8: Azure Web Apps",
+    "EN": "LAB 8: Azure Web Apps"
+  },
+  "Checks": {
+    "ResourceGroup": { "LT": "Resursų grupė", "EN": "Resource Group" },
+    "AppServicePlan": { "LT": "App Service Plan", "EN": "App Service Plan" },
+    "ScaleOut": { "LT": "Scale Out", "EN": "Scale Out" },
+    "WebApp": { "LT": "Web App", "EN": "Web App" },
+    "DeploymentSlot": { "LT": "Deployment Slot", "EN": "Deployment Slot" },
+    "ApplicationInsights": { "LT": "Application Insights", "EN": "Application Insights" },
+    "MetricAlert": { "LT": "Metric Alert", "EN": "Metric Alert" }
+  },
+  "Messages": {
+    "Found": { "LT": "Rasta", "EN": "Found" },
+    "NoResourceGroup": { "LT": "Nėra LAB08 resursų grupės", "EN": "LAB08 Resource Group not found" },
+    "ResourceGroupMissing": { "LT": "Nerasta LAB08 resursų grupė", "EN": "LAB08 Resource Group was not found" },
+    "ResourceGroupCheckFailed": { "LT": "Nepavyko patikrinti LAB08 resursų grupės", "EN": "Failed to check the LAB08 Resource Group" },
+    "MultipleResourceGroups": { "LT": "rastos kelios tinkamos LAB08 resursų grupės", "EN": "multiple matching LAB08 Resource Groups found" },
+
+    "PlanMissing": { "LT": "Nerastas App Service Plan", "EN": "App Service Plan was not found" },
+    "PlanUnsupported": { "LT": "šis planas nepalaiko laboratoriniam darbui reikalingų Deployment Slots", "EN": "this plan does not support the Deployment Slots required by the lab" },
+    "PlanDifferent": { "LT": "tikėtasi Premium v3 P0V3", "EN": "Premium v3 P0V3 expected" },
+    "PlanCheckFailed": { "LT": "Nepavyko patikrinti App Service Plan", "EN": "Failed to check the App Service Plan" },
+
+    "Instances": { "LT": "instance'ai", "EN": "instances" },
+    "ExpectedInstances": { "LT": "tikėtasi", "EN": "expected" },
+    "TooManyInstances": { "LT": "naudojama daugiau instance'ų nei reikia darbui", "EN": "more instances are running than required by the lab" },
+    "ScaleCheckFailed": { "LT": "Nepavyko patikrinti Scale Out", "EN": "Failed to check Scale Out" },
+
+    "WebAppMissing": { "LT": "Nerasta LAB08 Web App", "EN": "LAB08 Web App was not found" },
+    "WebAppCheckFailed": { "LT": "Nepavyko patikrinti Web App", "EN": "Failed to check the Web App" },
+    "MultipleWebApps": { "LT": "rastos kelios tinkamos Web App", "EN": "multiple matching Web Apps found" },
+
+    "SlotMissing": { "LT": "Nerastas testavimo Deployment Slot", "EN": "Testing Deployment Slot was not found" },
+    "SlotCheckFailed": { "LT": "Nepavyko patikrinti Deployment Slot", "EN": "Failed to check the Deployment Slot" },
+
+    "ApplicationInsightsMissing": { "LT": "Nerastas Application Insights resursas", "EN": "Application Insights resource was not found" },
+    "ApplicationInsightsCheckFailed": { "LT": "Nepavyko patikrinti Application Insights", "EN": "Failed to check Application Insights" },
+
+    "AlertMissing": { "LT": "Nerasta Metric Alert taisyklė", "EN": "Metric Alert rule was not found" },
+    "AlertScopeNotConfirmed": { "LT": "Alert rasta, bet nepavyko patvirtinti, kad ji priskirta LAB08 Web App", "EN": "Alert found, but its scope could not be confirmed as the LAB08 Web App" },
+    "AlertCheckFailed": { "LT": "Nepavyko patikrinti Metric Alert", "EN": "Failed to check the Metric Alert" }
+  },
+  "ResourceGroup": {
+    "Pattern": "^RG-LAB08-.+$"
+  },
+  "AppServicePlan": {
+    "NamePattern": ".+",
+    "ExpectedSku": "P0V3",
+    "ExpectedInstanceCount": 2
+  },
+  "WebApp": {
+    "NamePattern": "-webapp$"
+  },
+  "DeploymentSlot": {
+    "NamePattern": "(testavimo-aplinka|testing-env)$"
+  }
 }
