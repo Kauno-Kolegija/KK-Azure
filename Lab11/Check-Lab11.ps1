@@ -88,6 +88,11 @@ function Get-HttpJson {
                 $lastStatus = [int]$_.Exception.Response.StatusCode
             }
         }
+        # HTTP 503 is a definitive readiness failure for this lab exercise.
+        # Do not repeat an unsuccessful ready check three times.
+        if ($lastStatus -eq 503 -and $Uri -match '/ready(?:\?|$)') {
+            return [pscustomobject]@{ Status = 503; Data = $null; Error = $reason }
+        }
         if ($attempt -lt $attempts) {
             Start-Sleep -Seconds ([int]$Cfg.Application.RetryDelaySeconds)
         }

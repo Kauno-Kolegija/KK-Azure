@@ -24,9 +24,9 @@
   "Application": {
     "ExpectedVersion": "4.0",
     "RequiredSecretPrefix": "DEMO-",
-    "MaxAttempts": 3,
-    "RetryDelaySeconds": 6,
-    "TimeoutSeconds": 25
+    "MaxAttempts": 2,
+    "RetryDelaySeconds": 3,
+    "TimeoutSeconds": 10
   },
   "Deployments": {
     "V1": "Lab11-v1",
