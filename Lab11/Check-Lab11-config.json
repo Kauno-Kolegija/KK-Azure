@@ -8,7 +8,10 @@
   },
   "AppServicePlan": {
     "ExpectedSku": "F1",
-    "AcceptedSku": ["F1", "B1"],
+    "AcceptedSku": [
+      "F1",
+      "B1"
+    ],
     "ExpectedOs": "Linux"
   },
   "WebApp": {
@@ -30,35 +33,107 @@
     "V2": "Lab11-v2"
   },
   "Checks": {
-    "ResourceGroup": {"LT":"Resursų grupė", "EN":"Resource Group"},
-    "WebApp": {"LT":"Azure Web App", "EN":"Azure Web App"},
-    "AppServicePlan": {"LT":"App Service Plan", "EN":"App Service Plan"},
-    "NodeRuntime": {"LT":"Linux ir Node.js", "EN":"Linux and Node.js"},
-    "BicepV1": {"LT":"Bicep V1 diegimas", "EN":"Bicep V1 deployment"},
-    "KeyVault": {"LT":"Key Vault", "EN":"Key Vault"},
-    "BicepV2": {"LT":"Bicep V2 diegimas", "EN":"Bicep V2 deployment"},
-    "Health": {"LT":"Programos /health", "EN":"Application /health"},
-    "Readiness": {"LT":"Programos /ready", "EN":"Application /ready"},
-    "DemoConfig": {"LT":"DEMO konfigūracija", "EN":"DEMO configuration"},
-    "GitHubHistory": {"LT":"GitHub Actions ir PR istorija", "EN":"GitHub Actions and PR history"}
+    "ResourceGroup": {
+      "LT": "Resursų grupė",
+      "EN": "Resource Group"
+    },
+    "WebApp": {
+      "LT": "Azure Web App",
+      "EN": "Azure Web App"
+    },
+    "AppServicePlan": {
+      "LT": "App Service Plan",
+      "EN": "App Service Plan"
+    },
+    "NodeRuntime": {
+      "LT": "Linux ir Node.js",
+      "EN": "Linux and Node.js"
+    },
+    "BicepV1": {
+      "LT": "Bicep V1 diegimas",
+      "EN": "Bicep V1 deployment"
+    },
+    "KeyVault": {
+      "LT": "Key Vault",
+      "EN": "Key Vault"
+    },
+    "BicepV2": {
+      "LT": "Bicep V2 diegimas",
+      "EN": "Bicep V2 deployment"
+    },
+    "Health": {
+      "LT": "Programos /health",
+      "EN": "Application /health"
+    },
+    "Readiness": {
+      "LT": "Programos /ready",
+      "EN": "Application /ready"
+    },
+    "DemoConfig": {
+      "LT": "DEMO konfigūracija",
+      "EN": "DEMO configuration"
+    }
   },
   "Messages": {
-    "Found": {"LT":"Rasta", "EN":"Found"},
-    "NoRg": {"LT":"Nerasta LAB11 resursų grupė", "EN":"No LAB11 Resource Group found"},
-    "ManyRg": {"LT":"Rastos kelios LAB11 grupės; pasirinkite tikrinamą", "EN":"Multiple LAB11 groups found; select the one to validate"},
-    "ManyApps": {"LT":"Rastos kelios LAB11 Web App; pasirinkite tikrinamą", "EN":"Multiple LAB11 Web Apps found; select the one to validate"},
-    "MissingApp": {"LT":"Nerasta LAB11 Bicep sukurta Web App", "EN":"No LAB11 Web App created by Bicep was found"},
-    "MissingPlan": {"LT":"Nerastas su Web App susietas App Service Plan", "EN":"App Service Plan linked to Web App was not found"},
-    "WrongSku": {"LT":"kitoks planas nei F1; patikrinkite kainą", "EN":"plan differs from F1; check its cost"},
-    "MissingVault": {"LT":"Nerastas atitinkamas Key Vault", "EN":"Matching Key Vault not found"},
-    "MissingDeployment": {"LT":"Nerasta sėkmingo ARM diegimo istorija", "EN":"Successful ARM deployment history not found"},
-    "WebRequestFailed": {"LT":"Nepavyko pasiekti programos arba nuskaityti JSON", "EN":"Could not reach application or parse JSON"},
-    "WrongVersion": {"LT":"tikėtasi V4 (4.0)", "EN":"V4 (4.0) expected"},
-    "NotReady": {"LT":"programa neparengta; /ready turi grąžinti HTTP 200", "EN":"application not ready; /ready must return HTTP 200"},
-    "NotDemo": {"LT":"nepatvirtinta demonstracinė konfigūracija", "EN":"demo configuration not confirmed"},
-    "HistoryManual": {"LT":"istoriniai CI/CD gedimai, PR, monitoringo gedimas bei atkūrimas tikrinami ataskaitoje; skriptas jų nepatvirtina", "EN":"historical CI/CD failures, PR, monitoring failure and recovery require report evidence; this script cannot verify them"},
-    "CheckUnavailable": {"LT":"nepavyko atlikti patikros", "EN":"validation unavailable"},
-    "SelectInvalid": {"LT":"Neteisingas pasirinkimas – tikrinimas nutrauktas", "EN":"Invalid selection – validation aborted"},
-    "ScopeNote": {"LT":"Skriptas neskaito ir nerodo paslapčių reikšmių", "EN":"The checker does not read or display secret values"}
+    "Found": {
+      "LT": "Rasta",
+      "EN": "Found"
+    },
+    "NoRg": {
+      "LT": "Nerasta LAB11 resursų grupė",
+      "EN": "No LAB11 Resource Group found"
+    },
+    "ManyRg": {
+      "LT": "Rastos kelios LAB11 grupės; pasirinkite tikrinamą",
+      "EN": "Multiple LAB11 groups found; select the one to validate"
+    },
+    "ManyApps": {
+      "LT": "Rastos kelios LAB11 Web App; pasirinkite tikrinamą",
+      "EN": "Multiple LAB11 Web Apps found; select the one to validate"
+    },
+    "MissingApp": {
+      "LT": "Nerasta LAB11 Bicep sukurta Web App",
+      "EN": "No LAB11 Web App created by Bicep was found"
+    },
+    "MissingPlan": {
+      "LT": "Nerastas su Web App susietas App Service Plan",
+      "EN": "App Service Plan linked to Web App was not found"
+    },
+    "WrongSku": {
+      "LT": "kitoks planas nei F1; patikrinkite kainą",
+      "EN": "plan differs from F1; check its cost"
+    },
+    "MissingVault": {
+      "LT": "Nerastas atitinkamas Key Vault",
+      "EN": "Matching Key Vault not found"
+    },
+    "MissingDeployment": {
+      "LT": "Nerasta sėkmingo ARM diegimo istorija",
+      "EN": "Successful ARM deployment history not found"
+    },
+    "WebRequestFailed": {
+      "LT": "Nepavyko pasiekti programos arba nuskaityti JSON",
+      "EN": "Could not reach application or parse JSON"
+    },
+    "WrongVersion": {
+      "LT": "tikėtasi V4 (4.0)",
+      "EN": "V4 (4.0) expected"
+    },
+    "NotReady": {
+      "LT": "programa neparengta; /ready turi grąžinti HTTP 200",
+      "EN": "application not ready; /ready must return HTTP 200"
+    },
+    "NotDemo": {
+      "LT": "nepatvirtinta demonstracinė konfigūracija",
+      "EN": "demo configuration not confirmed"
+    },
+    "CheckUnavailable": {
+      "LT": "nepavyko atlikti patikros",
+      "EN": "validation unavailable"
+    },
+    "SelectInvalid": {
+      "LT": "Neteisingas pasirinkimas – tikrinimas nutrauktas",
+      "EN": "Invalid selection – validation aborted"
+    }
   }
 }

@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # LAB 11 CHECKER - AZURE GITHUB ACTIONS / BICEP / MONITORING
 # Uses configs/common.ps1 and configs/global.json.
 # Read-only: no deployments, no changes, no secret values.
@@ -124,11 +124,13 @@ try {
 
 $rgName = if ($rg) { [string]$rg.ResourceGroupName } else { '' }
 
-# 2. Web App: only accept the Bicep LAB11 name pattern, not GUI test apps.
+# 2. Web App: Az.Accounts/Az.Resources are available even when Az.Websites
+# (Get-AzWebApp) is not installed in Cloud Shell.
 $web = $null
 if ($rg) {
     try {
-        $webApps = @(Get-AzWebApp -ResourceGroupName $rgName -ErrorAction Stop | Where-Object {
+        $webApps = @(Get-AzResource -ResourceGroupName $rgName `
+            -ResourceType 'Microsoft.Web/sites' -ErrorAction Stop | Where-Object {
             $_.Name -match $Cfg.WebApp.NamePattern
         })
         $appItems = @($webApps | ForEach-Object {
@@ -136,7 +138,8 @@ if ($rg) {
         })
         if ($appItems.Count -gt 0) {
             $web = (Select-LabItem -Items $appItems -Label $LabMsg.ManyApps.$Lang).Item
-            Add-Result 'WebApp' 'OK' "$($web.Name) [$($web.State)]"
+            $webDetails = Get-ResourceProperties -Id ([string]$web.ResourceId)
+            Add-Result 'WebApp' 'OK' "$($web.Name) [$($webDetails.properties.state)]"
         } else {
             Add-Result 'WebApp' 'ERROR' $LabMsg.MissingApp.$Lang
         }
@@ -147,10 +150,12 @@ if ($rg) {
     Add-Result 'WebApp' 'ERROR' $LabMsg.NoRg.$Lang
 }
 
+$webId = if ($web) { [string]$web.ResourceId } else { '' }
+
 # 3. App Service Plan: identify it by Web App serverFarmId.
 if ($web) {
     try {
-        $webResource = Get-ResourceProperties -Id ([string]$web.Id)
+        $webResource = Get-ResourceProperties -Id ([string]$webId)
         $planId = [string]$webResource.properties.serverFarmId
         if (-not $planId) { throw 'serverFarmId unavailable' }
         $plan = Get-ResourceProperties -Id $planId
@@ -173,7 +178,7 @@ if ($web) {
 # 4. Runtime: read Web App config/web (not app settings; no secrets).
 if ($web) {
     try {
-        $cfgResource = Get-ResourceProperties -Id "$($web.Id)/config/web"
+        $cfgResource = Get-ResourceProperties -Id "$webId/config/web"
         $runtime = [string]$cfgResource.properties.linuxFxVersion
         if ($runtime -match $Cfg.WebApp.ExpectedRuntimePattern) {
             Add-Result 'NodeRuntime' 'OK' $runtime
@@ -194,15 +199,26 @@ if ($rg) {
     } catch { Add-Result 'BicepV1' 'WARNING' $LabMsg.MissingDeployment.$Lang }
 } else { Add-Result 'BicepV1' 'ERROR' $LabMsg.NoRg.$Lang }
 
-# 6. Key Vault: its name must match the LAB11 Web App suffix.
-if ($rg -and $web) {
+# 6. Key Vault: check independently of Web App, to avoid cascading failures.
+if ($rg) {
     try {
-        $suffix = ([string]$web.Name) -replace '^lab11', ''
-        $expectedVault = [string]$Cfg.KeyVault.NamePrefix + $suffix
-        $vaults = @(Get-AzResource -ResourceGroupName $rgName -ResourceType 'Microsoft.KeyVault/vaults' -ErrorAction Stop)
-        $vault = $vaults | Where-Object { $_.Name -ieq $expectedVault } | Select-Object -First 1
-        if ($vault) { Add-Result 'KeyVault' 'OK' $vault.Name }
-        else { Add-Result 'KeyVault' 'ERROR' "${expectedVault}: $($LabMsg.MissingVault.$Lang)" }
+        $vaults = @(Get-AzResource -ResourceGroupName $rgName `
+            -ResourceType 'Microsoft.KeyVault/vaults' -ErrorAction Stop)
+        if ($web) {
+            $suffix = ([string]$web.Name) -replace '^lab11', ''
+            $expectedVault = [string]$Cfg.KeyVault.NamePrefix + $suffix
+            $vault = $vaults | Where-Object { $_.Name -ieq $expectedVault } | Select-Object -First 1
+        } else {
+            $vault = $vaults | Where-Object {
+                $_.Name -like "$($Cfg.KeyVault.NamePrefix)*"
+            } | Select-Object -First 1
+        }
+        if ($vault) {
+            if ($web) { Add-Result 'KeyVault' 'OK' $vault.Name }
+            else { Add-Result 'KeyVault' 'WARNING' "$($vault.Name); Web App identity not confirmed" }
+        } else {
+            Add-Result 'KeyVault' 'ERROR' $LabMsg.MissingVault.$Lang
+        }
     } catch {
         Add-Result 'KeyVault' 'WARNING' "$($LabMsg.CheckUnavailable.$Lang): $($_.Exception.Message)"
     }
@@ -258,8 +274,4 @@ if ($healthResponse -and $healthResponse.Data -and $readyResponse -and $readyRes
     Add-Result 'DemoConfig' 'ERROR' $LabMsg.NotDemo.$Lang
 }
 
-# Historical GitHub tests / PR cannot be proven using the current Azure state.
-Add-Result 'GitHubHistory' 'INFO' $LabMsg.HistoryManual.$Lang
-
 Show-LabResults -Setup $Setup -LabName $LabName -Results $results
-Write-Host $LabMsg.ScopeNote.$Lang -ForegroundColor DarkGray
