@@ -1,6 +1,5 @@
-﻿# ============================================================
+# ============================================================
 # LAB 11 CHECKER - AZURE GITHUB ACTIONS / BICEP / MONITORING
-# Uses configs/common.ps1 and configs/global.json.
 # Read-only: no deployments, no changes, no secret values.
 # ============================================================
 
